@@ -22,26 +22,46 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 
 ## Wstępne kroki
 
-- dopracować dokumentację SOMA i projektową,
-- przygotować pierwsze user stories,
-- zamienić user stories na zadania programistyczne,
-- rozpocząć implementację backendu i frontendu w trybie TDD.
+- ✅ dopracowana dokumentacja SOMA i projektowa,
+- ✅ zdefiniowana struktura agentów i workflow,
+- ✅ stworzony backend Django z modelami użytkowników i rolami,
+- ✅ zaimplementowane API do rejestracji i logowania (email + social login),
+- ✅ konfiguracja Postgresa i automatyczne tworzenie superusera,
+- ⏳ przygotować pierwsze user stories,
+- ⏳ zamienić user stories na zadania programistyczne,
+- ⏳ kontynuować implementację modeli kursów i instancji kursu.
 
-## Organizacja pracy
+## Status pracy — 25.05.2026
 
-Projekt będzie prowadzony w modelu agentów:
+### Backend (✅ w trakcie)
+- Django 4.2 + DRF 3.17
+- Niestandardowy model User z rolami (student, mentor, owner, admin)
+- Endpointy API:
+  - `POST /api/auth/register/` — rejestracja ucznia/mentora
+  - `POST /api/auth/login/` — logowanie email + hasło
+  - `POST /api/auth/social-login/` — social login (Google, Facebook, iCloud)
+  - `GET /api/auth/verify-email/` — weryfikacja email
+  - `POST /api/auth/password-reset/` — reset hasła
+  - `GET /api/auth/me/` — dane bieżącego użytkownika
+- Baza danych: PostgreSQL
+- Automatyczne tworzenie superusera z zmiennych `.env`
 
-- analiza frameworka SOMA,
-- analiza wymagań i user stories,
-- planowanie zadań,
-- backend i frontend,
-- testowanie,
-- dokumentacja,
-- doradztwo technologiczne,
-- DevOps.
+### Frontend (⏳ do zrobienia)
+- Struktura React przygotowana do dalszego rozwoju
+
+### Dokumentacja (✅)
+- Framework SOMA opisany i sformatowany
+- Struktura agentów i ich role
+- Diagram workflow agentów
+- Plan projektu i wizja
+
+### Docker & Deployment (⏳ do zrobienia)
+- Przygotowanie docker-compose z Postgresem
+- CI/CD pipeline
 
 ## Dokumenty referencyjne
 
 - `../soma/README.md` – opis frameworka SOMA,
 - `AGENTS.md` – role w zespole agentów,
-- `diagram.mmd` – workflow agentów.
+- `diagram.mmd` – workflow agentów,
+- `BACKEND.md` – dokumentacja backendowych API (do utworzenia).
