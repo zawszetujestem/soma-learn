@@ -1,0 +1,44 @@
+[project]
+name = "soma-learn"
+version = "0.1.0"
+description = "Mentor-assisted learning workflow built with Django."
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "dj-database-url==3.1.2",
+    "Django==6.1",
+    "gunicorn==26.2.0",
+    "psycopg[binary]==3.3.4",
+    "python-dotenv==1.2.3",
+    "whitenoise==6.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "django-extensions==4.1",
+    "django-stubs==6.1.0",
+    "mypy==2.3.1",
+    "pip-audit==2.10.1",
+    "ruff==0.16.5",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.14"
+plugins = ["mypy_django_plugin.main"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[tool.django-stubs]
+django_settings_module = "soma_config.settings"

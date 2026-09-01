@@ -1,0 +1,1 @@
+Chcę się upewnić, że auto-deploy na gałęzi main jest obsługiwany przez {{platform_name}}, a nie przez żaden zewnętrzny system CI/CD.

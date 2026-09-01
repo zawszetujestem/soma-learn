@@ -1,59 +1,47 @@
-﻿# SOMA Learn
+# SOMA Learn
 
-SOMA Learn to nowoczesna platforma edukacyjna dla uczniów oparta na frameworku SOMA (Self-Organized Micro Agile).
+SOMA Learn to aplikacja Django wspierająca współpracę ucznia z mentorem.
 
-Aplikacja pomaga uczniom rozwijać wiedzę dzięki:
+## Uruchomienie przez Docker
 
-- krótkim sprintom nauki,
-- planowaniu celów,
-- adaptacyjnym ścieżkom rozwoju,
-- współpracy uczeń ↔ nauczyciel,
-- gamifikacji i systemowi postępów.
+Wymagany jest Docker Desktop z działającym silnikiem kontenerów.
 
-Projekt startuje od nauki matematyki dla polskich uczniów, ale architektura jest zaprojektowana tak, aby łatwo rozszerzyć ją na kolejne przedmioty i moduły AI wspierające edukację.
+```bash
+docker compose up --build
+```
 
-## Dlaczego SOMA?
+Po uruchomieniu:
 
-SOMA (Self-Organized Micro Agile) to framework pracy własnej inspirowany Agile, skupiony na:
+- health check: http://localhost:8000/healthz/
+- panel administracyjny: http://localhost:8000/admin/
 
-- mikro-sprintach,
-- iteracyjnym rozwoju,
-- regularnej refleksji,
-- adaptacyjnym planowaniu,
-- budowaniu samodzielności ucznia.
+Zatrzymanie usług:
 
-## Cel projektu
+```bash
+docker compose down
+```
 
-Projekt ma na celu stworzenie aplikacji edukacyjnej, która:
+Usunięcie lokalnych danych PostgreSQL:
 
-- pomaga uczniom utrzymać rytm nauki,
-- zmniejsza poczucie przeciążenia,
-- wspiera długoterminowy rozwój kompetencji,
-- automatyzuje planowanie i wsparcie dzięki AI.
+```bash
+docker compose down --volumes
+```
 
-## Architektura i technologie
+## Lokalne środowisko Python
 
-- Backend: Python + Django REST Framework,
-- Frontend: React,
-- Kolejki: Celery (w razie potrzeby),
-- Konteneryzacja: Docker,
-- Docelowo: wdrożenie w chmurze.
+Projekt używa Pythona 3.14, `uv`, @pyproject.toml i @uv.lock. Na Windows:
 
-## Jak zacząć
+```bash
+.venv/Scripts/python.exe -m pip install uv
+.venv/Scripts/uv.exe sync --frozen
+.venv/Scripts/python.exe manage.py check
+.venv/Scripts/python.exe manage.py test
+.venv/Scripts/ruff.exe check .
+.venv/Scripts/mypy.exe apps soma_config manage.py
+```
 
-1. Sprawdź dokumentację w folderze `DOC`.
-2. Przeczytaj `soma/README.md`, aby poznać zasady frameworku.
-3. Wybierz i uruchom środowisko wirtualne.
-4. Rozpocznij pracę nad pierwszym user story w ramach TDD.
+Skopiuj @.env.example do `.env` tylko dla lokalnych wartości. Nie commituj `.env`.
 
-## Dokumentacja
+## Wdrożenie
 
-Cała dokumentacja projektu znajduje się w folderze `DOC`.
-- `DOC/README.md` – wstęp do dokumentacji,
-- `DOC/PROJECT.md` – opis projektu, cele i zakres,
-- `DOC/AGENTS.md` – role agentów,
-- `DOC/diagram.mmd` – diagram przepływu pracy.
-
-## Aktualny status
-
-W tej chwili projekt ma przygotowaną strukturę dokumentacyjną oraz wstępny framework SOMA. Kolejnym krokiem jest rozwój modułów backendowych, frontendowych i testów.
+Decyzję platformową opisuje @context/foundation/infrastructure.md, a zatwierdzony zakres wykonania @context/deployment/deploy-plan.md. Produkcyjny deploy Railway pozostaje niewykonany do czasu jawnej zgody na utworzenie zasobów i możliwe koszty.
