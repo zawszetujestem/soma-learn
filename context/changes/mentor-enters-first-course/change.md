@@ -1,7 +1,7 @@
 ---
 change_id: mentor-enters-first-course
 title: Mentor loguje się i wchodzi do pierwszego gotowego kursu
-status: implemented
+status: impl_reviewed
 created: 2026-09-01
 updated: 2026-09-01
 archived_at: null

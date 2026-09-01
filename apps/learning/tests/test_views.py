@@ -43,3 +43,16 @@ class CourseViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.course.title)
+
+    def test_student_forbidden_on_course_entry(self) -> None:
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse("learning:course-entry", args=[self.course.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_redirected_from_course_entry(self) -> None:
+        response = self.client.get(reverse("learning:course-entry", args=[self.course.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.headers["Location"])

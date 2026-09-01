@@ -7,12 +7,11 @@ READY_COURSE_TITLE = "Matematyka — klasa 8"
 
 def seed_ready_course(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
     Course = apps.get_model("learning", "Course")
-    Course.objects.get_or_create(title=READY_COURSE_TITLE)
+    Course.objects.get_or_create(title=READY_COURSE_TITLE, defaults={})
 
 
 def unseed_ready_course(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
-    Course = apps.get_model("learning", "Course")
-    Course.objects.filter(title=READY_COURSE_TITLE).delete()
+    return
 
 
 class Migration(migrations.Migration):
