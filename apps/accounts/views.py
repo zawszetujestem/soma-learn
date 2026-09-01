@@ -3,7 +3,7 @@ from typing import cast
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -19,8 +19,12 @@ def register(request: HttpRequest) -> HttpResponse:
         form = RegistrationForm(request.POST)
         if form.is_valid():
             try:
-                user = form.save()
+                with transaction.atomic():
+                    user = form.save()
             except IntegrityError:
+                email = form.cleaned_data.get("email", "")
+                if not User.objects.filter(email__iexact=email).exists():
+                    raise
                 form.add_error("email", "Konto z tym adresem e-mail już istnieje.")
             else:
                 login(request, user)

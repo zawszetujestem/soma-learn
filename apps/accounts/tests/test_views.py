@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -34,6 +37,21 @@ class AccountViewTests(TestCase):
             fetch_redirect_response=False,
         )
         self.assertTrue(User.objects.filter(email="new.mentor@example.com").exists())
+
+    def test_register_non_email_integrity_error_propagates(self) -> None:
+        with patch(
+            "apps.accounts.views.RegistrationForm.save",
+            side_effect=IntegrityError("constraint violation unrelated to email"),
+        ):
+            with self.assertRaises(IntegrityError):
+                self.client.post(
+                    reverse("accounts:register"),
+                    data={
+                        "email": "brand.new@example.com",
+                        "password1": "strong-pass-123",
+                        "password2": "strong-pass-123",
+                    },
+                )
 
     def test_logout_redirects_to_login(self) -> None:
         user = User.objects.create_user(email="mentor@example.com", password="pass1234")
