@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-commit quality gates (staged Python files).
+# Enable with: git config core.hooksPath .githooks
+
+set -eu
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+echo "[quality-gates] ruff (staged)"
+.venv/Scripts/ruff.exe check $STAGED
+
+echo "[quality-gates] mypy (project)"
+.venv/Scripts/mypy.exe apps soma_config manage.py
+
+echo "[quality-gates] manage.py check"
+.venv/Scripts/python.exe manage.py check
