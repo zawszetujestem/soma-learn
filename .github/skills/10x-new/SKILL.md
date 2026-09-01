@@ -3,18 +3,18 @@ name: 10x-new
 description: Initialize a new change folder under context/changes/<change-id> with a change.md identity file
 ---
 
-# /10x-new — Rozpocznij Nową Zmianę
+# /10x-new — Rozpocznij nową zmianę
 
-Inicjuje nowy folder zmiany w `context/changes/<change-id>/`. Tworzy mały plik tożsamości (`change.md`) i kieruje użytkownika do następnej umiejętności.
+Zainicjuj nowy folder zmian w `context/changes/<change-id>/`. Tworzy mały plik tożsamości (`change.md`) i kieruje użytkownika do następnej umiejętności.
 
 „Zmiana” to pojedyncza jednostka pracy od początku do końca — badania, planowanie, implementacja i przegląd znajdują się w jednym folderze oznaczonym `<change-id>`.
 
-## Początkowa Odpowiedź
+## Początkowa odpowiedź
 
 Po wywołaniu tego polecenia:
 
 1. **Sprawdź, czy podano jakiś argument**:
-   - Jeśli podano argument, przeanalizuj go (patrz „Analiza Argumentów” poniżej) i przejdź do „Walidacji”.
+   - Jeśli podano argument, przeanalizuj go (patrz „Analiza argumentów” poniżej) i przejdź do „Walidacji”.
    - Jeśli NIE podano argumentu, odpowiedz następującą wiadomością i **ZATRZYMAJ**:
 
 ```
@@ -34,11 +34,11 @@ The change-id must be:
 
    Następnie **poczekaj**, aż użytkownik poda argument.
 
-## Analiza Argumentów
+## Analiza argumentów
 
 Podziel surowy ciąg argumentów na pierwszym ciągu białych znaków:
 
-- **Pierwszy token** = odniesienie do change-id. Znormalizuj je:
+- **Pierwszy token** = odwołanie do change-id. Znormalizuj je:
   1. Usuń początkowe `@`, jeśli występuje (`@context/changes/feature-x/` → `context/changes/feature-x/`).
   2. Usuń końcowe `/`, jeśli występuje.
   3. Jeśli wynik zawiera `/`, weź ostatni niepusty segment ścieżki (`context/changes/feature-x` → `feature-x`).
@@ -48,7 +48,7 @@ Podziel surowy ciąg argumentów na pierwszym ciągu białych znaków:
 Przykłady:
 
 | Surowe dane wejściowe | `<change-id>` | Zamiar |
-|---|---|---|
+|-----------|---------------|--------|
 | `feature-x` | `feature-x` | (puste) |
 | `oauth-login add Google sign-in for faster onboarding` | `oauth-login` | `add Google sign-in for faster onboarding` |
 | `@context/changes/oauth-login/` | `oauth-login` | (puste) |
@@ -59,11 +59,11 @@ Przykłady:
 
 Przed utworzeniem czegokolwiek:
 
-1. **Sprawdzenie kebab-case**: `<change-id>` musi pasować do `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` (zaczyna się literą, segmenty małych liter + cyfr oddzielone pojedynczymi myślnikami, bez początkowego/końcowego myślnika, bez podwójnych myślników).
-   - W przypadku niepowodzenia, wydrukuj: `error: change-id "<id>" is not kebab-case. Use lowercase letters, digits, and single hyphens only (e.g., "oauth-login", not "OAuth Login").` i ZATRZYMAJ.
+1. **Sprawdzenie kebab-case**: `<change-id>` musi pasować do `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` (zaczyna się literą, segmenty małych liter + cyfry oddzielone pojedynczymi myślnikami, bez początkowego/końcowego myślnika, bez podwójnych myślników).
+   - W przypadku niepowodzenia wydrukuj: `error: change-id "<id>" is not kebab-case. Use lowercase letters, digits, and single hyphens only (e.g., "oauth-login", not "OAuth Login").` i ZATRZYMAJ.
 
 2. **Sprawdzenie unikalności**: ani `context/changes/<change-id>/`, ani `context/archive/<change-id>/` nie mogą już istnieć.
-   - W przypadku kolizji, wydrukuj: `error: change "<id>" already exists at <path>. Pick a different change-id or work inside the existing folder.` i ZATRZYMAJ.
+   - W przypadku kolizji wydrukuj: `error: change "<id>" already exists at <path>. Pick a different change-id or work inside the existing folder.` i ZATRZYMAJ.
 
 3. **Istnieje katalog nadrzędny `context/changes/`**: jeśli brakuje, wydrukuj `error: context/changes/ not found — is this repo set up for the 10x context structure?` i ZATRZYMAJ. (NIE twórz automatycznie katalogu nadrzędnego; to znak, że repozytorium nie jest gotowe.)
 
@@ -71,12 +71,12 @@ Przed utworzeniem czegokolwiek:
 
 1. Utwórz katalog `context/changes/<change-id>/`.
 2. Wyprowadź `<title>`:
-   - Jeśli ciąg zamiaru jest pusty, zhumanizuj change-id: zastąp myślniki spacjami i napisz pierwszą literę wielką (np. `multi-course-access` → `Multi course access`).
-   - Jeśli ciąg zamiaru nie jest pusty, napisz zwięzły, czytelny dla człowieka tytuł (≤ 80 znaków, wielkość liter zdania, bez kropki na końcu), który oddaje istotę zmiany. Zamiar jest *wskazówką*, a nie dosłownością — możesz go przeformułować. Nie wrzucaj akapitu do tytułu.
+   - Jeśli ciąg zamiaru jest pusty, uczłowiecz change-id: zastąp myślniki spacjami i napisz pierwszą literę wielką (np. `multi-course-access` → `Multi course access`).
+   - Jeśli ciąg zamiaru nie jest pusty, napisz zwięzły, czytelny dla człowieka tytuł (≤ 80 znaków, wielkość liter zdania, bez kropki na końcu), który oddaje istotę zmiany. Zamiar jest *wskazówką*, a nie dosłownym tekstem — możesz go przeformułować. Nie wrzucaj akapitu do tytułu.
 3. Wyprowadź treść `## Notes`:
    - Jeśli ciąg zamiaru jest pusty, wyemituj komentarz podpowiedzi: `<!-- Free-form notes for this change: links, ad-hoc context, decisions that don't belong in research/frame/plan. -->`
    - Jeśli ciąg zamiaru nie jest pusty, wstaw go dosłownie jako treść Notatek — słowa użytkownika są zalążkiem. W takim przypadku nie emituj również komentarza podpowiedzi (użytkownik pokazał, że wie, do czego służą Notatki).
-4. Zapisz `context/changes/<change-id>/change.md` w dokładnie takim kształcie (slot `<notes-body>` to to, co wyprodukował krok 3):
+4. Zapisz `context/changes/<change-id>/change.md` w dokładnie takim kształcie (slot `<notes-body>` to to, co zostało wyprodukowane w kroku 3):
 
 ```markdown
 ---

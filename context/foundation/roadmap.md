@@ -3,7 +3,7 @@ project: "SOMA"
 version: 1
 status: draft
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 prd_version: 1
 main_goal: market-feedback
 top_blocker: time
@@ -41,12 +41,14 @@ SOMA ma pomóc uczniowi szkoły podstawowej utrzymać motywację podczas przygot
 
 | ID | Change ID | Wynik (użytkownik może…) | Wymagania wstępne | Odniesienia do PRD | Status |
 |---|---|---|---|---|---|
-| F-01 | access-and-invitation-contract | (fundament) Granice ról, kont i zaproszeń są rozstrzygnięte | — | FR-001, FR-003, FR-004; Access Control Changes | planning |
-| S-01 | mentor-enters-first-course | Mentor może zalogować się i wejść do jednego gotowego kursu | F-01 | FR-001, FR-002 | proposed |
+| F-01 | access-and-invitation-contract | (fundament) Granice ról, kont i zaproszeń są rozstrzygnięte | — | FR-001, FR-003, FR-004; Access Control Changes | in-progress |
+| S-01 | mentor-enters-first-course | Mentor może zalogować się i wejść do jednego gotowego kursu | F-01 | FR-001, FR-002 | in-progress |
 | S-02 | student-accepts-course-invitation | Uczeń może przyjąć adresowane zaproszenie i uzyskać dostęp do kursu | S-01 | FR-001, FR-003, FR-004 | proposed |
 | S-03 | mentor-plans-first-cycle | Mentor i uczeń mogą ustalić cel, a mentor wybrać zadania bieżącego cyklu | S-02 | FR-005, FR-009 | proposed |
 | S-04 | student-sees-cycle-work | Uczeń może zobaczyć materiały i zadania cyklu bez uruchamiania zablokowanego backlogu | S-03 | FR-006, FR-010 | proposed |
 | S-05 | first-mentor-approved-task | Uczeń może oddać zadanie, a mentor zatwierdzić je albo zwrócić do poprawy | S-04 | US-01, FR-007, FR-008 | blocked |
+| S-06 | account-deletion-rodo | Użytkownik może usunąć konto; dane osobowe są usuwane, relacje zachowują audyt | F-01 | Access Control Changes; RODO | proposed |
+| S-07 | ux-polish | Drobne poprawki UX/UI: linki, komunikaty, stany puste | S-01 | FR-001, FR-002 | proposed |
 
 ## Baza
 
@@ -72,7 +74,7 @@ Stan kodu na dzień 2026-08-31, automatycznie zbadany i potwierdzony przez użyt
 - **Blokery:** —
 - **Niewiadome:** —
 - **Ryzyko:** Rozstrzygnięcie tych granic przed pierwszym kontem zapobiega utrwaleniu modelu dostępu sprzecznego z prywatnością relacji uczeń–mentor.
-- **Status:** planning
+- **Status:** in-progress
 
 ## Wycinki
 
@@ -87,7 +89,7 @@ Stan kodu na dzień 2026-08-31, automatycznie zbadany i potwierdzony przez użyt
 - **Niewiadome:**
   - Jaki minimalny zakres gotowego kursu wystarczy do pierwszego pilota? — Właściciel: użytkownik. Blok: nie.
 - **Ryzyko:** Ten wycinek najwcześniej integruje konto, dane i prosty interfejs bez budowania całego katalogu kursów.
-- **Status:** proposed
+- **Status:** in-progress
 
 ### S-02: Uczeń przyjmuje zaproszenie do kursu
 
@@ -138,6 +140,31 @@ Stan kodu na dzień 2026-08-31, automatycznie zbadany i potwierdzony przez użyt
   - Jaki dowód wykonania zadania uczeń przekazuje mentorowi w pierwszej wersji? — Właściciel: użytkownik. Blok: tak.
 - **Ryzyko:** To milestone walidacyjny; jeśli zatwierdzenie nie daje obu rolom jasnego stanu i następnego kroku, wcześniejsze wycinki nie potwierdzają wartości produktu.
 - **Status:** blocked
+
+### S-06: Usunięcie konta (RODO)
+
+- **Wynik:** Użytkownik może usunąć własne konto; dane osobowe znikają, a zakończone relacje zachowują wyłącznie metadane audytowe.
+- **Change ID:** account-deletion-rodo
+- **Odniesienia do PRD:** Access Control Changes; Success Criteria / Guardrails; RODO.
+- **Wymagania wstępne:** F-01.
+- **Równolegle z:** S-07.
+- **Blokery:** —
+- **Niewiadome:**
+  - Czy usunięcie konta mentora wymaga uprzedniego zakończenia aktywnych relacji? — Właściciel: użytkownik. Blok: nie.
+- **Ryzyko:** Usunięcie konta musi być nieodwracalne dla danych osobowych, ale nie może usunąć audytu relacji — obszar osobny od przepływu kursów.
+- **Status:** proposed
+
+### S-07: Poprawki UX/UI
+
+- **Wynik:** Użytkownik widzi sensowne linki nawigacyjne, komunikaty i stany puste zamiast surowych formularzy i list.
+- **Change ID:** ux-polish
+- **Odniesienia do PRD:** FR-001, FR-002; Quality Constraints.
+- **Wymagania wstępne:** S-01.
+- **Równolegle z:** S-06.
+- **Blokery:** —
+- **Niewiadome:** —
+- **Ryzyko:** Czysto prezentacyjne zmiany nie mogą dotykać logiki domenowej — wtedy zachowują niezależność od S-06.
+- **Status:** proposed
 
 ## Przekazanie do backlogu
 

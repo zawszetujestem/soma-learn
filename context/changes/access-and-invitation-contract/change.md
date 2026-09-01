@@ -1,9 +1,9 @@
 ---
 change_id: access-and-invitation-contract
 title: Kontrakt ról i zaproszeń uczeń-mentor
-status: planned
+status: impl_reviewed
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 archived_at: null
 ---
 

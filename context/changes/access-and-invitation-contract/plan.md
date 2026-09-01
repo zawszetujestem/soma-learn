@@ -211,35 +211,35 @@ Zmiana `AUTH_USER_MODEL` jest bezpieczna wyłącznie przed utrwaleniem danych pr
 
 #### Automated
 
-- [ ] 1.1 Migracje nie mają niezapisanych zmian
-- [ ] 1.2 Testy aplikacji kont przechodzą
-- [ ] 1.3 Django, Ruff i mypy przechodzą
+- [x] 1.1 Migracje nie mają niezapisanych zmian
+- [x] 1.2 Testy aplikacji kont przechodzą
+- [x] 1.3 Django, Ruff i mypy przechodzą
 
 #### Manual
 
-- [ ] 1.4 Administrator pokazuje e-mail i obie role
+- [x] 1.4 Administrator pokazuje e-mail i obie role
 
 ### Phase 2: Zaproszenie i relacja per kurs
 
 #### Automated
 
-- [ ] 2.1 Migracje stosują się na pustej bazie testowej
-- [ ] 2.2 Testy cyklu życia i nadużyć przechodzą
-- [ ] 2.3 Pełne testy, Ruff i mypy przechodzą
+- [x] 2.1 Migracje stosują się na pustej bazie testowej
+- [x] 2.2 Testy cyklu życia i nadużyć przechodzą
+- [x] 2.3 Pełne testy, Ruff i mypy przechodzą
 
 #### Manual
 
-- [ ] 2.4 Baza nie przechowuje surowego tokenu
+- [x] 2.4 Baza nie przechowuje surowego tokenu
 
 ### Phase 3: Granice dostępu i walidacja PostgreSQL
 
 #### Automated
 
-- [ ] 3.1 Testy izolacji relacji przechodzą
-- [ ] 3.2 Lokalne bramki jakości przechodzą
-- [ ] 3.3 Compose stosuje migracje i pozostaje zdrowy
+- [x] 3.1 Testy izolacji relacji przechodzą
+- [x] 3.2 Lokalne bramki jakości przechodzą
+- [x] 3.3 Compose stosuje migracje i pozostaje zdrowy
 
 #### Manual
 
-- [ ] 3.4 Reset dotyczy wyłącznie developerskiego wolumenu
-- [ ] 3.5 Zakończona relacja zachowuje audyt bez dostępu mentora
+- [x] 3.4 Reset dotyczy wyłącznie developerskiego wolumenu
+- [x] 3.5 Zakończona relacja zachowuje audyt bez dostępu mentora

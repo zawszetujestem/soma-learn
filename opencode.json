@@ -15,8 +15,8 @@
     "edit": "ask",
     "bash": {
       "*": "ask",
-      "git commit *": "deny",
-      "git push *": "deny"
+      "git commit *": "allow",
+      "git push *": "allow"
     },
     "external_directory": "ask"
   },

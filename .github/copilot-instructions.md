@@ -1,54 +1,52 @@
 <!-- BEGIN @przeprogramowani/10x-cli -->
 
-## 10xDevs AI Toolkit — Moduł 2, Lekcja 2
+## 10xDevs AI Toolkit - Moduł 2, Lekcja 4
 
-Przekształć jeden element planu działania w pierwszy cykl implementacji za pomocą **łańcucha planowania zmian**:
+Przygotuj się na trudniejszy strumień implementacji z **łańcuchem planowania opartym na badaniach**:
 
 ```
-/10x-roadmap -> /10x-new -> /10x-plan -> /10x-plan-review -> /10x-implement
+badania wewnętrzne (/10x-research) + badania zewnętrzne (exa.ai, Context7) -> /10x-plan -> /10x-implement -> sukces
 ```
 
-`/10x-new`, `/10x-plan`, `/10x-plan-review` i `/10x-implement` to główne tematy lekcji. `/10x-frame` i `/10x-research` nie są tutaj wymaganymi rytuałami; są to ścieżki eskalacji wprowadzone w następnej lekcji.
+Lekcja koncentruje się na rozróżnianiu badań wewnętrznych od zewnętrznych oraz wykorzystywaniu dowodów do wspierania decyzji planistycznych.
 
-### Router zadań — Od czego zacząć
+### Router zadań - Od czego zacząć
 
-| Umiejętność | Użyj, gdy |
+| Umiejętność | Kiedy jej używać |
 | --- | --- |
-| **Konfiguracja zmiany (główny temat lekcji)** | |
-| `/10x-new <change-id>` | Wybrałeś element planu działania i potrzebujesz stabilnego folderu zmian. Tworzy `context/changes/<change-id>/change.md`, dzięki czemu planowanie, implementacja, postęp, commity i późniejsza recenzja mają jedną tożsamość. Użyj PO wyborze planu działania, PRZED `/10x-plan`. |
-| **Planowanie (główny temat lekcji)** | |
-| `/10x-plan <change-id>` | Masz folder zmian i potrzebujesz planu implementacji do recenzji. Odczytuje kontekst planu działania, dokumenty podstawowe, dowody z bazy kodu i wszelkie istniejące notatki o zmianach; zapisuje `plan.md` i `plan-brief.md` z fazami, kontraktami plików, kryteriami sukcesu i `## Progress`. |
-| **Gotowość planu (główny temat lekcji)** | |
-| `/10x-plan-review <change-id>` | Masz `plan.md` i potrzebujesz lekkiej kontroli gotowości przed kodowaniem. Użyj jej, aby wychwycić brakujący stan końcowy, słabe kontrakty, źle sformułowany postęp, dryf zakresu lub martwe punkty, zanim rozpoczną się zmiany w kodzie. |
-| **Implementacja (główny temat lekcji)** | |
-| `/10x-implement <change-id> phase <n>` | Masz zatwierdzony plan i chcesz wykonać jedną fazę z weryfikacją, ręczną bramką, rytuałem commitowania i zapisem SHA do `## Progress`. |
-| **Zamknięcie cyklu życia** | |
-| `/10x-archive <change-id>` | Zmiana została scalona lub celowo zamknięta. Przenieś ją z aktywnego `context/changes/` do stanu archiwum. |
+| **Badania wewnętrzne (fokus lekcji)** | |
+| `/10x-research <change-id>` | Potrzebujesz dowodów z istniejącej bazy kodu — wzorców, konwencji, punktów integracji lub istniejących implementacji. Uruchamia równoległe sub-agenty w repozytorium i zapisuje ustrukturyzowane wyniki do `research.md`. |
+| **Badania zewnętrzne (fokus lekcji)** | |
+| exa.ai | Potrzebujesz natywnego dla AI wyszukiwania w sieci w celu porównania bibliotek, najlepszych praktyk lub kontekstu ekosystemu, na które baza kodu nie może odpowiedzieć. |
+| Context7 (`resolve-library-id` → `get-library-docs`) | Potrzebujesz aktualnej dokumentacji na żywo dla konkretnej biblioteki lub frameworka. Najpierw rozwiązuje ID biblioteki, a następnie pobiera odpowiednie strony dokumentacji. |
+| **Kadrowanie koła zapasowego** | |
+| `/10x-frame <change-id>` | Plan nie zbiega się, plan nie przynosi oczekiwanych rezultatów lub uporczywe odchylenia ciągle psują implementację. Użyj jako wyjścia awaryjnego dla oddzielnego problemu (pokazane na przykładzie Space Explorers), a nie jako rytuału przed badaniami. |
+| **Planowanie i wykonanie** | |
+| `/10x-plan <change-id>` / `/10x-implement <change-id> phase <n>` | Użyj tego samego łańcucha planowania i wykonania z Lekcji 2, teraz z dowodami z badań wstępnych zasilającymi plan. |
 
-### Jak działa przekazywanie w łańcuchu
+### Dyscyplina badawcza
 
-- `/10x-new` tworzy trwałą tożsamość zmiany.
-- `/10x-plan` przekształca tę tożsamość w kontrakt implementacyjny.
-- `/10x-plan-review` sprawdza plan, zanim agent zmodyfikuje kod.
-- `/10x-implement` wykonuje jedną zaplanowaną fazę, weryfikuje, prosi o ręczne potwierdzenie, gdy jest to potrzebne, commituje i rejestruje postęp.
+- Badania wewnętrzne (`/10x-research`) odpowiadają na pytanie "co już robi nasza baza kodu?" — wzorce, schematy, konwencje, punkty integracji.
+- Badania zewnętrzne (exa.ai, Context7) odpowiadają na pytanie "co powinniśmy zrobić?" — możliwości bibliotek, dokumentacja API, najlepsze praktyki ekosystemu.
+- Połącz oba jako dowody do `/10x-plan`. Plan bez dowodów z badań w przypadku nietrywialnego strumienia jest zgadywaniem.
+- Dokumentacja przyjazna agentom (`llms.txt`, markdown-for-agents, `/md` endpoints) jest sygnałem jakości przy wyborze bibliotek — biblioteki, które publikują dokumentację czytelną dla agentów, integrują się szybciej.
 
-### Granice lekcji
+### `/10x-frame` jako koło zapasowe
 
-- Plan jest domyślnym routerem po wyborze planu działania. Zacznij od `/10x-plan`, chyba że problem jest niejasny lub blokują go zewnętrzne dowody.
-- Nie uruchamiaj `/10x-frame + /10x-research` jako ceremonii dla każdej zmiany.
-- Nie przekształcaj tej lekcji w pełną, kompleksową budowę produktu. Punkt kontrolny z zaplanowanym i częściowo lub w pełni zaimplementowanym strumieniem jest prawidłowy.
-- Przegląd kodu zaimplementowanego diffa należy do Lekcji 3 za pośrednictwem `/10x-impl-review`.
-- Zamknięcie cyklu życia za pośrednictwem `/10x-archive` po scaleniu lub celowym zamknięciu zmiany.
+Trzy wyzwalacze do sięgnięcia po `/10x-frame`:
+1. Plan nie zbiega się — badania ciągle otwierają więcej pytań zamiast zawężać się do kontraktu.
+2. Plan nie przynosi rezultatów — implementacja wielokrotnie nie spełnia kryteriów sukcesu.
+3. Uporczywe odchylenia — implementacja ciągle odbiega od planu w sposób sugerujący, że problem został źle sformułowany.
+
+Pokazane na przykładzie Space Explorers, a nie na ścieżce SRS. Jest to wyjście awaryjne, a nie obowiązkowy krok.
 
 ### Ścieżki używane w tej lekcji
 
-- `context/foundation/roadmap.md` - nadrzędny plan działania
-- `context/changes/<change-id>/change.md` - tożsamość zmiany
-- `context/changes/<change-id>/plan.md` - kontrakt implementacyjny
-- `context/changes/<change-id>/plan-brief.md` - skompresowane przekazanie
+- `context/changes/<change-id>/research.md` - wynik badań wewnętrznych
+- `context/changes/<change-id>/frame.md` - wynik kadrowania, gdy jest potrzebny
+- `context/changes/<change-id>/plan.md` - kontrakt implementacyjny oparty na dowodach
 - `context/foundation/lessons.md` - powtarzające się zasady i pułapki
-- `docs/reference/contract-surfaces.md` - rejestr nazw nośnych
 
-Umiejętności nie mogą zapisywać do `context/archive/`. Zarchiwizowane zmiany są niezmienne; jeśli rozwiązana ścieżka docelowa zaczyna się od `context/archive/`, przerwij z komunikatem: "Ta zmiana jest zarchiwizowana. Zamiast tego otwórz nową zmianę za pomocą `/10x-new`."
+Umiejętności nie mogą zapisywać do `context/archive/`. Zarchiwizowane zmiany są niezmienne; jeśli rozwiązana ścieżka docelowa zaczyna się od `context/archive/`, przerwij z komunikatem: "This change is archived. Open a new change with `/10x-new` instead."
 
 <!-- END @przeprogramowani/10x-cli -->

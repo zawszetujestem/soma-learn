@@ -49,6 +49,8 @@ CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
     "apps.core.apps.CoreConfig",
+    "apps.accounts.apps.AccountsConfig",
+    "apps.learning.apps.LearningConfig",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -98,6 +100,13 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
+
+
+AUTH_USER_MODEL = "accounts.User"
+
+LOGIN_URL = "accounts:login"
+LOGIN_REDIRECT_URL = "learning:course-list"
+LOGOUT_REDIRECT_URL = "accounts:login"
 
 
 # Password validation
