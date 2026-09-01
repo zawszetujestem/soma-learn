@@ -29,3 +29,27 @@ class UserModelTests(TestCase):
         user = User.objects.create_user(email="student@example.com", password="pass1234")
 
         self.assertEqual(str(user), "student@example.com")
+
+    def test_soft_delete_anonymizes_email_and_removes_password(self) -> None:
+        user = User.objects.create_user(email="student@example.com", password="pass1234")
+        original_email = user.email
+
+        user.soft_delete()
+        user.refresh_from_db()
+
+        self.assertNotEqual(user.email, original_email)
+        self.assertTrue(user.email.startswith("deleted-"))
+        self.assertFalse(user.has_usable_password())
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.is_student)
+        self.assertFalse(user.is_mentor)
+        self.assertIsNotNone(user.deleted_at)
+
+    def test_soft_delete_frees_email_for_reuse(self) -> None:
+        user = User.objects.create_user(email="student@example.com", password="pass1234")
+        user.soft_delete()
+
+        recreated = User.objects.create_user(email="student@example.com", password="pass1234")
+
+        self.assertNotEqual(recreated.pk, user.pk)
+        self.assertEqual(recreated.email, "student@example.com")

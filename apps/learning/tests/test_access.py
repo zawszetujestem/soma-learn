@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from apps.learning.models import Course, Relationship
-from apps.learning.services import students_with_active_relationship
+from apps.learning.services import end_relationships_for_user, students_with_active_relationship
 
 User = get_user_model()
 
@@ -56,6 +56,24 @@ class StudentAccessSelectorTests(TestCase):
         Relationship.objects.create(
             mentor=self.mentor, student=self.student, course=self.other_course
         )
+
+        students = students_with_active_relationship(mentor=self.mentor, course=self.course)
+
+        self.assertFalse(students.exists())
+
+    def test_deleted_mentor_loses_access_to_students(self) -> None:
+        Relationship.objects.create(mentor=self.mentor, student=self.student, course=self.course)
+        self.mentor.soft_delete()
+        end_relationships_for_user(user=self.mentor)
+
+        students = students_with_active_relationship(mentor=self.mentor, course=self.course)
+
+        self.assertFalse(students.exists())
+
+    def test_deleted_student_is_not_visible_to_mentor(self) -> None:
+        Relationship.objects.create(mentor=self.mentor, student=self.student, course=self.course)
+        self.student.soft_delete()
+        end_relationships_for_user(user=self.student)
 
         students = students_with_active_relationship(mentor=self.mentor, course=self.course)
 

@@ -122,9 +122,22 @@ def end_relationship(*, relationship: Relationship, actor: User) -> Relationship
     return relationship
 
 
+@transaction.atomic
+def end_relationships_for_user(*, user: User) -> int:
+    now = timezone.now()
+    ended_as_mentor = Relationship.objects.filter(
+        mentor=user, status=Relationship.Status.ACTIVE
+    ).update(status=Relationship.Status.ENDED, ended_at=now)
+    ended_as_student = Relationship.objects.filter(
+        student=user, status=Relationship.Status.ACTIVE
+    ).update(status=Relationship.Status.ENDED, ended_at=now)
+    return ended_as_mentor + ended_as_student
+
+
 def students_with_active_relationship(*, mentor: User, course: Course) -> QuerySet[User]:
     return (
         UserModel.objects.filter(
+            is_active=True,
             learning_relationships__mentor=mentor,
             learning_relationships__course=course,
             learning_relationships__status=Relationship.Status.ACTIVE,

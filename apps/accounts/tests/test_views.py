@@ -42,3 +42,24 @@ class AccountViewTests(TestCase):
         response = self.client.post(reverse("accounts:logout"))
 
         self.assertRedirects(response, reverse("accounts:login"))
+
+    def test_authenticated_user_can_delete_account(self) -> None:
+        user = User.objects.create_user(email="mentor@example.com", password="pass1234")
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("accounts:delete-account"))
+
+        self.assertRedirects(response, reverse("accounts:login"))
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.has_usable_password())
+        self.assertFalse(user.is_mentor)
+        self.assertIsNotNone(user.deleted_at)
+
+    def test_anonymous_cannot_delete_account(self) -> None:
+        response = self.client.post(reverse("accounts:delete-account"))
+
+        self.assertRedirects(
+            response,
+            f"{reverse('accounts:login')}?next={reverse('accounts:delete-account')}",
+        )

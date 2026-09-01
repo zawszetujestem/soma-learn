@@ -13,6 +13,7 @@ from apps.learning.services import (
     StudentRoleRequired,
     accept_invitation,
     end_relationship,
+    end_relationships_for_user,
     issue_invitation,
     reissue_invitation,
 )
@@ -151,3 +152,40 @@ class EndRelationshipTests(TestCase):
 
         with self.assertRaises(RelationshipParticipantError):
             end_relationship(relationship=self.relationship, actor=stranger)
+
+
+class EndRelationshipsForUserTests(TestCase):
+    def setUp(self) -> None:
+        self.mentor = User.objects.create_user(email="mentor@example.com", password="pass1234")
+        self.student = User.objects.create_user(email="student@example.com", password="pass1234")
+        self.course = Course.objects.create(title="Matematyka - klasa 8")
+        self.relationship = Relationship.objects.create(
+            mentor=self.mentor, student=self.student, course=self.course
+        )
+
+    def test_ends_all_active_relationships_for_user(self) -> None:
+        ended_count = end_relationships_for_user(user=self.student)
+
+        self.relationship.refresh_from_db()
+        self.assertEqual(ended_count, 1)
+        self.assertEqual(self.relationship.status, Relationship.Status.ENDED)
+        self.assertIsNotNone(self.relationship.ended_at)
+
+    def test_completed_relationship_audit_survives_account_deletion(self) -> None:
+        end_relationship(relationship=self.relationship, actor=self.mentor)
+        self.relationship.refresh_from_db()
+        mentor_id = self.relationship.mentor_id
+        student_id = self.relationship.student_id
+        course_id = self.relationship.course_id
+        started_at = self.relationship.started_at
+        ended_at = self.relationship.ended_at
+
+        self.student.soft_delete()
+        self.relationship.refresh_from_db()
+
+        self.assertEqual(self.relationship.mentor_id, mentor_id)
+        self.assertEqual(self.relationship.student_id, student_id)
+        self.assertEqual(self.relationship.course_id, course_id)
+        self.assertEqual(self.relationship.status, Relationship.Status.ENDED)
+        self.assertEqual(self.relationship.started_at, started_at)
+        self.assertEqual(self.relationship.ended_at, ended_at)
