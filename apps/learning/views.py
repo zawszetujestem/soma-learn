@@ -1,26 +1,28 @@
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from .models import Course
+from .models import CourseInstance
 
 
-class MentorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    request: HttpRequest
-
-    def test_func(self) -> bool:
-        user = self.request.user
-        return bool(user.is_authenticated and getattr(user, "is_mentor", False))
-
-
-class CourseListView(MentorRequiredMixin, View):
+class CourseListView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
-        courses = Course.objects.order_by("title")
-        return render(request, "learning/course_list.html", {"courses": courses})
+        user = request.user
+        instances = CourseInstance.objects.filter(
+            Q(mentor=user) | Q(student=user)
+        ).select_related("course").order_by("course__title", "pk")
+        return render(request, "learning/course_list.html", {"instances": instances})
 
 
-class CourseEntryView(MentorRequiredMixin, View):
+class CourseEntryView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pk: int) -> HttpResponse:
-        course = get_object_or_404(Course, pk=pk)
-        return render(request, "learning/course_entry.html", {"course": course})
+        user = request.user
+        instance = get_object_or_404(
+            CourseInstance.objects.select_related("course"), pk=pk
+        )
+        if user.pk not in {instance.mentor_id, instance.student_id}:
+            raise PermissionDenied("You do not have access to this course instance.")
+        return render(request, "learning/course_entry.html", {"instance": instance})

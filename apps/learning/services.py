@@ -10,7 +10,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 
-from .models import Course, Invitation, Relationship
+from .models import Course, CourseInstance, Invitation, Relationship
 
 if TYPE_CHECKING:
     from apps.accounts.models import User
@@ -52,13 +52,22 @@ def _normalize_email(email: str) -> str:
     return UserModel.objects.normalize_email(email)
 
 
+def _get_or_create_instance(*, mentor: User, course: Course, email: str) -> CourseInstance:
+    return CourseInstance.objects.get_or_create(
+        mentor=mentor,
+        course=course,
+        student_email=_normalize_email(email),
+    )[0]
+
+
 def issue_invitation(*, mentor: User, course: Course, email: str) -> tuple[Invitation, str]:
     if not mentor.is_mentor:
         raise MentorRoleRequired("Invitations may only be issued by mentors.")
+    instance = _get_or_create_instance(mentor=mentor, course=course, email=email)
     raw_token = secrets.token_urlsafe(32)
     invitation = Invitation.objects.create(
         mentor=mentor,
-        course=course,
+        instance=instance,
         email=_normalize_email(email),
         token_hash=_hash_token(raw_token),
         expires_at=timezone.now() + INVITATION_TTL,
@@ -70,14 +79,20 @@ def issue_invitation(*, mentor: User, course: Course, email: str) -> tuple[Invit
 def reissue_invitation(*, mentor: User, course: Course, email: str) -> tuple[Invitation, str]:
     if not mentor.is_mentor:
         raise MentorRoleRequired("Invitations may only be issued by mentors.")
-    normalized_email = _normalize_email(email)
+    instance = _get_or_create_instance(mentor=mentor, course=course, email=email)
     Invitation.objects.filter(
-        mentor=mentor,
-        course=course,
-        email=normalized_email,
+        instance=instance,
         status=Invitation.Status.PENDING,
     ).update(status=Invitation.Status.REVOKED)
-    return issue_invitation(mentor=mentor, course=course, email=normalized_email)
+    raw_token = secrets.token_urlsafe(32)
+    invitation = Invitation.objects.create(
+        mentor=mentor,
+        instance=instance,
+        email=_normalize_email(email),
+        token_hash=_hash_token(raw_token),
+        expires_at=timezone.now() + INVITATION_TTL,
+    )
+    return invitation, raw_token
 
 
 @transaction.atomic
@@ -94,20 +109,21 @@ def accept_invitation(*, raw_token: str, student: User) -> Relationship:
         raise InvitationNotUsableError("Invitation has expired.")
     if _normalize_email(invitation.email) != _normalize_email(student.email):
         raise EmailMismatchError("Invitation email does not match the accepting account.")
+    instance = invitation.instance
+    instance.student = student
+    instance.save(update_fields=["student"])
     if Relationship.objects.filter(
-        mentor=invitation.mentor,
+        mentor=instance.mentor,
         student=student,
-        course=invitation.course,
+        instance=instance,
         status=Relationship.Status.ACTIVE,
     ).exists():
         raise InvitationNotUsableError(
-            "Student already has an active relationship for this course."
+            "Student already has an active relationship for this instance."
         )
     invitation.status = Invitation.Status.ACCEPTED
     invitation.save(update_fields=["status"])
-    return Relationship.objects.create(
-        mentor=invitation.mentor, student=student, course=invitation.course
-    )
+    return Relationship.objects.create(mentor=instance.mentor, student=student, instance=instance)
 
 
 @transaction.atomic
@@ -139,7 +155,7 @@ def students_with_active_relationship(*, mentor: User, course: Course) -> QueryS
         UserModel.objects.filter(
             is_active=True,
             learning_relationships__mentor=mentor,
-            learning_relationships__course=course,
+            learning_relationships__instance__course=course,
             learning_relationships__status=Relationship.Status.ACTIVE,
         )
         .distinct()

@@ -43,5 +43,11 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 
+[[tool.mypy.overrides]]
+module = ["*.migrations.*"]
+disallow_untyped_defs = false
+check_untyped_defs = false
+ignore_errors = true
+
 [tool.django-stubs]
 django_settings_module = "soma_config.settings"

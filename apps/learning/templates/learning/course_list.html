@@ -5,11 +5,11 @@
 {% block content %}
     <h1>Kursy</h1>
 
-    {% if courses %}
+    {% if instances %}
         <p>Wybierz kurs, aby kontynuować.</p>
         <ul>
-            {% for course in courses %}
-                <li><a href="{% url 'learning:course-entry' course.pk %}">{{ course.title }}</a></li>
+            {% for instance in instances %}
+                <li><a href="{% url 'learning:course-entry' instance.pk %}">{{ instance.course.title }}</a></li>
             {% endfor %}
         </ul>
     {% else %}

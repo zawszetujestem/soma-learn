@@ -10,6 +10,34 @@ class Course(models.Model):
         return self.title
 
 
+class CourseInstance(models.Model):
+    mentor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="course_instances"
+    )
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="instances")
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="enrolled_instances",
+        null=True,
+        blank=True,
+    )
+    student_email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["mentor", "course", "student_email"],
+                name="unique_course_instance",
+            )
+        ]
+
+    def __str__(self) -> str:
+        label = self.student.email if self.student else self.student_email
+        return f"{self.mentor} → {label} ({self.course.title})"
+
+
 class Invitation(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending"
@@ -20,7 +48,9 @@ class Invitation(models.Model):
     mentor = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_invitations"
     )
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="invitations")
+    instance = models.ForeignKey(
+        CourseInstance, on_delete=models.CASCADE, related_name="invitations"
+    )
     email = models.EmailField()
     token_hash = models.CharField(max_length=64, unique=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
@@ -34,7 +64,7 @@ class Invitation(models.Model):
         return self.expires_at <= timezone.now()
 
     def __str__(self) -> str:
-        return f"{self.email} → {self.course.title}"
+        return f"{self.email} → {self.instance.course.title}"
 
 
 class Relationship(models.Model):
@@ -42,13 +72,15 @@ class Relationship(models.Model):
         ACTIVE = "active"
         ENDED = "ended"
 
+    instance = models.ForeignKey(
+        CourseInstance, on_delete=models.CASCADE, related_name="relationships"
+    )
     mentor = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="mentorships"
     )
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="learning_relationships"
     )
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="relationships")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
@@ -56,11 +88,11 @@ class Relationship(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["mentor", "student", "course"],
+                fields=["mentor", "student", "instance"],
                 condition=models.Q(status="active"),
                 name="unique_active_relationship",
             )
         ]
 
     def __str__(self) -> str:
-        return f"{self.mentor} → {self.student} ({self.course.title})"
+        return f"{self.mentor} → {self.student} ({self.instance.course.title})"

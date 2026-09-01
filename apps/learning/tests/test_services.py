@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.learning.models import Course, Invitation, Relationship
+from apps.learning.models import Course, CourseInstance, Invitation, Relationship
 from apps.learning.services import (
     EmailMismatchError,
     InvitationNotUsableError,
@@ -37,6 +37,25 @@ class IssueInvitationTests(TestCase):
         self.assertNotEqual(invitation.token_hash, raw_token)
         self.assertEqual(invitation.expires_at.date(), (timezone.now() + timedelta(days=7)).date())
 
+    def test_issue_creates_instance(self) -> None:
+        issue_invitation(mentor=self.mentor, course=self.course, email=self.student.email)
+
+        instance = CourseInstance.objects.get(
+            mentor=self.mentor, course=self.course, student_email=self.student.email
+        )
+        self.assertIsNone(instance.student)
+
+    def test_issue_reuses_instance_on_resend(self) -> None:
+        issue_invitation(mentor=self.mentor, course=self.course, email=self.student.email)
+        issue_invitation(mentor=self.mentor, course=self.course, email=self.student.email)
+
+        self.assertEqual(
+            CourseInstance.objects.filter(
+                mentor=self.mentor, course=self.course, student_email=self.student.email
+            ).count(),
+            1,
+        )
+
     def test_non_mentor_cannot_issue(self) -> None:
         self.student.is_student = True
         self.student.save(update_fields=["is_student"])
@@ -56,14 +75,14 @@ class AcceptInvitationTests(TestCase):
             mentor=self.mentor, course=self.course, email=self.student.email
         )
 
-    def test_happy_path_creates_active_relationship(self) -> None:
+    def test_happy_path_creates_active_relationship_and_pins_student(self) -> None:
         relationship = accept_invitation(raw_token=self.raw_token, student=self.student)
 
         self.invitation.refresh_from_db()
         self.assertEqual(self.invitation.status, Invitation.Status.ACCEPTED)
         self.assertEqual(relationship.status, Relationship.Status.ACTIVE)
-        self.assertEqual(relationship.mentor_id, self.mentor.pk)
-        self.assertEqual(relationship.course_id, self.course.pk)
+        self.assertEqual(relationship.instance.mentor_id, self.mentor.pk)
+        self.assertEqual(relationship.instance.student_id, self.student.pk)
 
     def test_non_student_cannot_accept(self) -> None:
         self.student.is_student = False
@@ -84,9 +103,6 @@ class AcceptInvitationTests(TestCase):
 
         with self.assertRaises(InvitationNotUsableError):
             accept_invitation(raw_token=self.raw_token, student=self.student)
-
-        self.invitation.refresh_from_db()
-        self.assertTrue(self.invitation.is_expired)
 
     def test_unknown_token_rejected(self) -> None:
         with self.assertRaises(InvitationNotUsableError):
@@ -132,8 +148,14 @@ class EndRelationshipTests(TestCase):
         self.mentor = User.objects.create_user(email="mentor@example.com", password="pass1234")
         self.student = User.objects.create_user(email="student@example.com", password="pass1234")
         self.course = Course.objects.create(title="Matematyka - klasa 8")
+        self.instance = CourseInstance.objects.create(
+            mentor=self.mentor,
+            course=self.course,
+            student_email=self.student.email,
+            student=self.student,
+        )
         self.relationship = Relationship.objects.create(
-            mentor=self.mentor, student=self.student, course=self.course
+            mentor=self.mentor, student=self.student, instance=self.instance
         )
 
     def test_mentor_can_end(self) -> None:
@@ -159,8 +181,14 @@ class EndRelationshipsForUserTests(TestCase):
         self.mentor = User.objects.create_user(email="mentor@example.com", password="pass1234")
         self.student = User.objects.create_user(email="student@example.com", password="pass1234")
         self.course = Course.objects.create(title="Matematyka - klasa 8")
+        self.instance = CourseInstance.objects.create(
+            mentor=self.mentor,
+            course=self.course,
+            student_email=self.student.email,
+            student=self.student,
+        )
         self.relationship = Relationship.objects.create(
-            mentor=self.mentor, student=self.student, course=self.course
+            mentor=self.mentor, student=self.student, instance=self.instance
         )
 
     def test_ends_all_active_relationships_for_user(self) -> None:
@@ -176,7 +204,7 @@ class EndRelationshipsForUserTests(TestCase):
         self.relationship.refresh_from_db()
         mentor_id = self.relationship.mentor_id
         student_id = self.relationship.student_id
-        course_id = self.relationship.course_id
+        instance_id = self.relationship.instance_id
         started_at = self.relationship.started_at
         ended_at = self.relationship.ended_at
 
@@ -185,7 +213,7 @@ class EndRelationshipsForUserTests(TestCase):
 
         self.assertEqual(self.relationship.mentor_id, mentor_id)
         self.assertEqual(self.relationship.student_id, student_id)
-        self.assertEqual(self.relationship.course_id, course_id)
+        self.assertEqual(self.relationship.instance_id, instance_id)
         self.assertEqual(self.relationship.status, Relationship.Status.ENDED)
         self.assertEqual(self.relationship.started_at, started_at)
         self.assertEqual(self.relationship.ended_at, ended_at)

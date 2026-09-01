@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}{{ course.title }} — SOMA{% endblock %}
+{% block title %}{{ instance.course.title }} — SOMA{% endblock %}
 
 {% block content %}
-    <h1>{{ course.title }}</h1>
+    <h1>{{ instance.course.title }}</h1>
     <p><a href="{% url 'learning:course-list' %}">&larr; Wróć do listy kursów</a></p>
 {% endblock %}
