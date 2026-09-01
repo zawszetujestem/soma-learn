@@ -4,9 +4,14 @@
 
 {% block content %}
     <h1>Utwórz konto</h1>
+
+    <p>Załóż konto, aby rozpocząć naukę z mentorem.</p>
+
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
         <button type="submit">Zarejestruj</button>
     </form>
+
+    <p>Masz już konto? <a href="{% url 'accounts:login' %}">Zaloguj się</a>.</p>
 {% endblock %}
