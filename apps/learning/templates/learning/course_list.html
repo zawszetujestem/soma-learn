@@ -4,11 +4,20 @@
 
 {% block content %}
     <h1>Kursy</h1>
-    <ul>
-        {% for course in courses %}
-            <li><a href="{% url 'learning:course-entry' course.pk %}">{{ course.title }}</a></li>
-        {% empty %}
-            <li>Brak dostępnych kursów.</li>
-        {% endfor %}
-    </ul>
+
+    {% if courses %}
+        <p>Wybierz kurs, aby kontynuować.</p>
+        <ul>
+            {% for course in courses %}
+                <li><a href="{% url 'learning:course-entry' course.pk %}">{{ course.title }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Nie masz jeszcze żadnych kursów. Skontaktuj się z opiekunem, aby otrzymać dostęp do kursu.</p>
+    {% endif %}
+
+    <form method="post" action="{% url 'accounts:logout' %}">
+        {% csrf_token %}
+        <button type="submit">Wyloguj się</button>
+    </form>
 {% endblock %}

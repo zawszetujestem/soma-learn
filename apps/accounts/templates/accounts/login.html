@@ -4,9 +4,22 @@
 
 {% block content %}
     <h1>Zaloguj się</h1>
+
+    {% if next %}
+        <p>Zaloguj się, aby kontynuować.</p>
+    {% endif %}
+
+    {% if form.errors %}
+        <p><strong>Logowanie nie powiodło się. Sprawdź e-mail i hasło i spróbuj ponownie.</strong></p>
+    {% else %}
+        <p>Wpisz e-mail i hasło, aby przejść do kursów.</p>
+    {% endif %}
+
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
         <button type="submit">Zaloguj</button>
     </form>
+
+    <p>Nie masz jeszcze konta? <a href="{% url 'accounts:register' %}">Zarejestruj się</a>.</p>
 {% endblock %}
