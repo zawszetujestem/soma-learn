@@ -1,6 +1,22 @@
 # SOMA Learn
 
-SOMA Learn to aplikacja Django wspierająca współpracę ucznia z mentorem.
+SOMA Learn to aplikacja webowa Django wspierająca współpracę ucznia z mentorem. Uczeń podstawówki przygotowuje się do egzaminu, a mentor planuje z nim zakres bieżącego cyklu, kontroluje, które zadania są dostępne, i weryfikuje wykonaną pracę. Celem MVP jest sprawdzenie, czy wspólne planowanie i obowiązkowa weryfikacja zadania tworzą użyteczny rytm zamiast kolejnej listy zadań.
+
+## Funkcje
+
+- **Logowanie e-mailem i hasłem** — własny model użytkownika z rolami ucznia i mentora (`is_student`/`is_mentor`).
+- **Kursy jako instancje per para** — mentor wysyłając zaproszenie tworzy instancję kursu widoczną wyłącznie jemu i uczniowi; obcy użytkownik dostaje 403.
+- **Cykl życia zaproszenia** — siedmiodniowe, jednorazowe zaproszenie do konkretnego kursu, z tokenem przechowywanym wyłącznie jako skrót (SHA-256).
+- **Usuwanie konta (RODO)** — soft-delete z anonimizacją danych osobowych, przy zachowaniu audytu relacji.
+
+## Dokumentacja
+
+Fundament produktu i stan techniczny opisują dokumenty w `context/foundation/`:
+
+- `prd.md` — wymagania produktowe (FR-001–FR-010), user stories, zasady biznesowe.
+- `roadmap.md` — mapa drogowa MVP (F-01, S-01–S-07).
+- `test-plan.md` — mapa ryzyk i fazowy plan testów.
+- `stack-assessment.md`, `health-check.md`, `infrastructure.md` — decyzje techniczne.
 
 ## Uruchomienie przez Docker
 
@@ -41,6 +57,11 @@ Projekt używa Pythona 3.14, `uv`, @pyproject.toml i @uv.lock. Na Windows:
 ```
 
 Skopiuj @.env.example do `.env` tylko dla lokalnych wartości. Nie commituj `.env`.
+
+## Testy
+
+- **Unit + integracja** (Django test runner): `.venv/Scripts/python.exe manage.py test`
+- **E2E** (Playwright): `npx playwright test` — uruchamia własny serwer na porcie 8010 i osobną bazę `e2e.sqlite3`.
 
 ## Wdrożenie
 

@@ -2,8 +2,8 @@
   "package": "@przeprogramowani/10x-cli",
   "version": "1.20.0",
   "manifestVersion": 3,
-  "lastApplied": "2026-09-01T17:26:42.996Z",
-  "lessonId": "m3l4",
+  "lastApplied": "2026-09-01T18:01:43.181Z",
+  "lessonId": "m0l0",
   "course": "10xdevs3",
   "tool": "copilot",
   "files": {
@@ -761,7 +761,7 @@
       "configs": []
     },
     "m0l0": {
-      "appliedAt": "2026-09-01T11:17:17.362Z",
+      "appliedAt": "2026-09-01T18:01:43.180Z",
       "skills": {},
       "prompts": [
         "skill-explainer.md",
