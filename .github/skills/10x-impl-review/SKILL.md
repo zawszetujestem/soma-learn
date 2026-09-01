@@ -7,7 +7,7 @@ description: Review implementation against plan for drift, dangerous decisions, 
 
 Porównaj rzeczywistą pracę implementacyjną z pierwotnym planem, aby wychwycić odchylenia, niebezpieczne decyzje, naruszenia architektury i niewłaściwe użycie wzorców, zanim się skumulują.
 
-Dwie ziarnistości:
+Dwie granularności:
 - **Przegląd fazy**: po pojedynczej fazie — szybki, skoncentrowany na zmianach w tej fazie
 - **Pełny przegląd planu**: po wszystkich fazach — kompleksowe sprawdzenie
 
@@ -29,9 +29,9 @@ Jeśli rozwiązana ścieżka planu zaczyna się od `context/archive/`, odmów: w
 
 Utwórz zadanie: "Implementation Review" / activeForm "Loading context"
 
-1. **Wczytaj plik planu w całości** — bez limitu/offsetu.
+1. **Wczytaj cały plik planu** — bez limitu/offsetu.
 2. **Wczytaj `context/foundation/lessons.md` jeśli istnieje** i użyj zaakceptowanych reguł jako priorytetów podczas skanowania w poszukiwaniu ustaleń — odchylenie, które narusza znaną, powtarzającą się regułę, jest silniejszym sygnałem niż ogólna uwaga stylistyczna.
-3. **Wczytaj kanoniczny stan z sekcji `## Progress` planu** (patrz `references/progress-format.md`): completion = `count([x]) / count([ ] + [x])`; current phase = faza zawierająca pierwsze `- [ ]` (lub ostatnia faza, jeśli wszystkie są zakończone). Wczytaj również sąsiedni `change.md` dla `status` i `updated`.
+3. **Odczytaj kanoniczny stan z sekcji `## Progress` planu** (patrz `references/progress-format.md`): completion = `count([x]) / count([ ] + [x])`; current phase = faza zawierająca pierwsze `- [ ]` (lub ostatnia faza, jeśli wszystkie są zakończone). Odczytaj również sąsiedni `change.md` dla `status` i `updated`.
 4. **Zakres**: żądana konkretna faza → tylko ta faza; w przeciwnym razie wszystkie fazy, których pola wyboru postępu są w pełni `[x]` (tj. zakończone fazy).
 5. **Wyodrębnij** z przeglądanych faz: ścieżki plików z "Changes Required", decyzje architektoniczne, kryteria sukcesu (punkty automatyczne/ręczne w blokach faz + ich lustrzane odbicie `[ ]`/`[x]` w postępie) oraz listę "What We're NOT Doing" (bariery zakresu).
 6. **Wykrywanie zakresu Git** — co faktycznie się zmieniło:
@@ -40,27 +40,27 @@ Utwórz zadanie: "Implementation Review" / activeForm "Loading context"
    git log --oneline --after="${PLAN_DATE}" -- .
    git diff --name-only $(git log --reverse --after="${PLAN_DATE}" --format="%H" | head -1)^..HEAD 2>/dev/null
    ```
-   Jeśli zakres nie może być czysto określony, wróć do commitów, których komunikaty odwołują się do planu/funkcji.
+   Jeśli zakres nie może być czysto określony, wróć do commitów, których wiadomości odwołują się do planu/funkcji.
 
 Porównaj listę zmienionych plików z listą plików planu:
 - **W planie ORAZ w diffie** → oczekiwana zmiana, zweryfikuj, czy zawartość odpowiada intencji
 - **W diffie, ale NIE w planie** → nieplanowana zmiana, zbadaj i oznacz
 - **W planie, ale NIE w diffie** → potencjalnie brakująca implementacja
 
-Nie wczytuj każdego zmienionego pliku do głównego kontekstu — pozwól podagentom wczytać to, czego potrzebują. Główny kontekst powinien zawierać plan i podsumowanie diffa, a nie pełne źródło 20 plików.
+Nie wczytuj każdego zmienionego pliku do głównego kontekstu — pozwól pod-agentom wczytać to, czego potrzebują. Główny kontekst powinien zawierać plan i podsumowanie diffa, a nie pełne źródło 20 plików.
 
-## Krok 2: Równoległy przegląd za pomocą podagentów
+## Krok 2: Równoległy przegląd za pomocą pod-agentów
 
 Zaktualizuj zadanie: activeForm "Gathering evidence"
 
-Uruchom **dwa** podagenty jednocześnie. Każdy otrzymuje ukierunkowany kontekst — nie wrzucaj całego planu do obu.
+Uruchom **dwóch** pod-agentów jednocześnie. Każdy otrzymuje ukierunkowany kontekst — nie wrzucaj całego planu do obu.
 
 **Agent 1 — Wykrywanie odchyleń od planu** (`subagent_type: "general-purpose"`)
 
 Daj mu: tekst "Changes Required" dla przeglądanych faz, listę ścieżek plików do odczytania.
 
 Instrukcje: dla każdej zaplanowanej zmiany, przeczytaj rzeczywisty plik i zweryfikuj, czy implementacja odpowiada intencji. Sprawdź:
-- Zmiany zaimplementowane inaczej niż zaplanowano (niezgodność intencji, nie formatowania)
+- Zmiany zaimplementowane inaczej niż zaplanowano (niezgodność intencji, a nie formatowania)
 - Zaplanowane elementy pominięte bez dokumentacji
 - Dodatki nieopisane w planie (rozszerzenie zakresu)
 
@@ -76,7 +76,7 @@ Instrukcje:
    - **Bezpieczeństwo**: ryzyka wstrzyknięcia (SQL, polecenia, XSS), zakodowane na stałe sekrety, brak autentykacji/autoryzacji na granicach systemu, zbyt liberalne CORS/uprawnienia.
    - **Wydajność**: zapytania N+1, nieograniczone iteracje/rekurencje, brak paginacji, niepotrzebne synchroniczne I/O.
    - **Niezawodność**: brak obsługi błędów na zewnętrznych granicach (wywołania API, I/O plików, DB), warunki wyścigu, wycieki zasobów.
-   - **Bezpieczeństwo danych**: destrukcyjne operacje DB bez wycofania, zmiany schematu bez ścieżki migracji, potencjalna utrata danych.
+   - **Bezpieczeństwo danych**: destrukcyjne operacje DB bez wycofywania, zmiany schematu bez ścieżki migracji, potencjalna utrata danych.
 
 2. **Zgodność ze wzorcami** — dla każdego zmienionego pliku znajdź 1-2 podobne istniejące pliki i porównaj nazewnictwo, podejście do obsługi błędów, strukturę modułów, importy/eksporty, strukturę testów, wzorce konfiguracji. **Zgłaszaj tylko istotne niezgodności** (np. nowy moduł używa camelCase, gdzie sąsiednie używają snake_case; nowy punkt końcowy pomija wzorzec middleware autoryzacji, którego używa reszta API). Pomiń trywialne różnice stylistyczne — jeśli kod działa i jest zgodny z planem, drobne formatowanie nie jest ustaleniem.
 
@@ -92,7 +92,7 @@ Dla każdej przeglądanej fazy:
 
 **Automatyczne**: uruchom każde polecenie z pól wyboru "Automated Verification" za pomocą powłoki. Zapisz polecenie, wynik (pass/fail), rzeczywiste wyjście (obetnij, jeśli jest ogromne).
 
-**Ręczne**: w sekcji `## Progress` sprawdź elementy ręczne jako `- [x]` vs `- [ ]`. Oznacz elementy oznaczone jako ukończone, które nie mają widocznych dowodów w diffie (możliwe "podpisywanie na ślepo"); uznaj niezaznaczone elementy jako oczekujące.
+**Ręczne**: w sekcji `## Progress` sprawdź elementy ręczne jako `- [x]` vs `- [ ]`. Oznacz elementy oznaczone jako ukończone, które nie mają widocznych dowodów w diffie (możliwe "podpisywanie na ślepo"); uznaj niezaznaczone elementy za oczekujące.
 
 ## Krok 4: Skompiluj ustalenia i przedstaw raport
 
@@ -105,7 +105,7 @@ Każde ustalenie ma:
 - **Wymiar**: Plan Adherence / Scope Discipline / Safety & Quality / Architecture / Pattern Consistency / Success Criteria
 - **Tytuł**: jedna linia
 - **Lokalizacja**: `file:line` (lub "N/A" dla brakujących elementów)
-- **Szczegóły**: co jest nie tak z dowodami — plan vs. rzeczywistość, lub kod vs. oczekiwania
+- **Szczegóły**: co jest nie tak z dowodami — plan vs. rzeczywistość, lub kod vs. oczekiwane
 - **Opcje naprawy**: 1 lub 2 (patrz poniżej)
 
 ### Wpływ
@@ -126,7 +126,7 @@ Domyślnie **jedna** poprawka. Oferuj dwie tylko wtedy, gdy istnieje prawdziwy k
 
 **Ustalenia o średnim/wysokim wpływie**: każda opcja otrzymuje:
 ```
-[1-zdaniowe podejście] · Siła: [zaleta, najlepiej oparta na dowodach z kodu/planu] · Kompromis: [koszt lub ryzyko] · Pewność: HIGH|MED|LOW — [1-linia dlaczego] · Martwy punkt: [czego nie zweryfikowaliśmy, lub "None significant"]
+[1-zdaniowe podejście] · Siła: [zaleta, najlepiej oparta na dowodach z kodu/planu] · Kompromis: [koszt lub ryzyko] · Pewność: HIGH|MED|LOW — [1-liniowe dlaczego] · Martwy punkt: [czego nie zweryfikowaliśmy, lub "None significant"]
 ```
 
 Oferując dwie opcje, oznacz dokładnie jedną `⭐ Recommended`.
@@ -244,16 +244,16 @@ Zwykły tekst, rysowanie ramek. Wymiary PASS pojawiają się tylko w tabeli werd
 
 - **Linia tytułu ustalenia** zawiera tylko ID i krótki tytuł — nic więcej. Wszystko inne znajduje się poniżej jako oznaczone pola, dzięki czemu każdy wiersz jest krótki i łatwy do skanowania.
 - **Zawsze łącz ikony ze słowem.** Nigdy nie używaj samej ikony jako jedynego sygnału — `❌ CRITICAL`, a nie tylko `❌`. Dzięki temu raport jest czytelny podczas przeglądania i nie zmusza użytkownika do zapamiętywania znaczenia każdej ikony.
-- **Wpływ zawsze zawiera swoje jednowierszowe znaczenie** (skopiuj z tabeli Wpływ — "stawka architektoniczna; pomyśl dokładnie przed podjęciem decyzji" / "prawdziwy kompromis; zatrzymaj się, aby to przemyśleć" / "szybka decyzja; poprawka jest oczywista i wąsko zakrojona"). Dzięki temu LOW/MEDIUM/HIGH są samoobjaśniające się w miejscu użycia, zamiast polegać na tym, że użytkownik pamięta tabelę.
+- **Wpływ zawsze zawiera swoje jednowierszowe znaczenie** (skopiuj z tabeli Wpływ — "stawka architektoniczna; pomyśl dokładnie przed podjęciem decyzji" / "prawdziwy kompromis; zatrzymaj się, aby to przemyśleć" / "szybka decyzja; poprawka jest oczywista i wąsko zakrojona"). Dzięki temu LOW/MEDIUM/HIGH są zrozumiałe w miejscu użycia, zamiast polegać na tym, że użytkownik pamięta tabelę.
 - Ważność, Wpływ, Wymiar, Lokalizacja znajdują się każdy w osobnej linii z wyrównanymi etykietami. Szczegóły zaczynają się w osobnej linii pod etykietą `Detail:`, dzięki czemu mogą naturalnie zawijać się.
 
 ### Zapisywanie raportu (zawsze)
 
-**Każda ścieżka przez tę umiejętność utrwala raport i oznacza zmianę** — Triage now, Triage later i Done zapisują plik. To właśnie pozwala `/10x-archive` i `/10x-status` zobaczyć przegląd i utrzymuje poprawność `change.md.status`. Zrób to *przed* przedstawieniem opcji kontynuacji — nigdy warunkowo i nigdy tylko w gałęziach "save".
+**Każda ścieżka przez tę umiejętność utrwala raport i stempluje zmianę** — Triage now, Triage later i Done zapisują plik. To właśnie pozwala `/10x-archive` i `/10x-status` zobaczyć przegląd i utrzymuje poprawność `change.md.status`. Zrób to *przed* przedstawieniem opcji kontynuacji — nigdy warunkowo i nigdy tylko w gałęziach "zapisz".
 
 1. **Zapisz plik raportu** do `context/changes/<change-id>/reviews/impl-review.md` (lub `context/changes/<change-id>/reviews/impl-review-phase-N.md` dla przeglądu ograniczonego do fazy), używając poniższego formatu. Utwórz katalog `reviews/`, jeśli nie istnieje.
-2. **Oznacz `change.md`**: ustaw `status: impl_reviewed` i `updated: <today>`. Raz, tutaj — niezależnie od tego, którą opcję kontynuacji wybierze użytkownik. (Jeśli pole `change.md` jest już `impl_reviewed`, po prostu odśwież `updated`.)
-3. Jeśli użytkownik później przeprowadzi sortowanie, raport na dysku jest kopią roboczą: jego pola `Decision:` są aktualizowane na miejscu w miarę podejmowania decyzji dotyczących każdego ustalenia (Krok 5), a wszelkie dalsze działania "fix in plan/code" są kolejkowane do `context/changes/<change-id>/follow-ups/review-fixes.md`.
+2. **Oznacz `change.md`**: ustaw `status: impl_reviewed` i `updated: <dzisiaj>`. Raz, tutaj — niezależnie od tego, którą opcję kontynuacji wybierze użytkownik. (Jeśli pole `change.md` jest już `impl_reviewed`, po prostu odśwież `updated`.)
+3. Jeśli użytkownik później przeprowadzi sortowanie, raport na dysku jest kopią roboczą: jego pola `Decision:` są aktualizowane na bieżąco, gdy każda z ustaleń jest rozstrzygana (Krok 5), a wszelkie dalsze działania "napraw w planie/kodzie" są kolejkowane do `context/changes/<change-id>/follow-ups/review-fixes.md`.
 
 ```markdown
 <!-- IMPL-REVIEW-REPORT -->
@@ -326,7 +326,7 @@ Znacznik `<!-- IMPL-REVIEW-REPORT -->` i pola `Decision: PENDING` umożliwiają 
 
 ### Opcje kontynuacji
 
-Po zapisaniu raportu i oznaczeniu `change.md`, zapytaj, jak postępować:
+Po zapisaniu raportu i ostemplowaniu `change.md`, zapytaj, jak postępować:
 
 Zapytaj użytkownika: "Review saved to <report-path>. How would you like to proceed?"
 header: "Implementation Review — [N] findings"
@@ -388,7 +388,7 @@ multiSelect: false
 **Obsługa odpowiedzi:**
 - **Apply Fix A/B / Fix now**: pokaż dokładną zmianę kodu przed/po. Krótkie potwierdzenie ("Apply this?"), a następnie edytuj kod. Oznacz FIXED (zapisz, która opcja, np. "Fixed via Fix A").
 - **Fix differently**: zapytaj o preferowane podejście, zastosuj poprawkę, oznacz FIXED.
-- **Record as lesson**: wstępnie wypełnij cztery pola wpisu lekcji bezpośrednio z ustalenia — `Context` z lokalizacji ustalenia, `Problem` ze szczegółów ustalenia, `Rule` i `Applies to` pozostaw jako puste miejsca do wypełnienia przez użytkownika. Pokaż proponowany wpis jako kompletny blok markdown i poproś użytkownika o edycję / potwierdzenie za pomocą Zapytaj użytkownika: ("Approve this entry?" / "Edit before saving" / "Cancel"). Po potwierdzeniu, dołącz wpis jako nową sekcję H2 do `context/foundation/lessons.md` — jeśli plik nie istnieje, utwórz go najpierw z tym kanonicznym 5-liniowym nagłówkiem (bez oddzielnego pliku szablonu; nagłówek jest osadzony tutaj):
+- **Record as lesson**: wstępnie wypełnij cztery pola wpisu lekcji bezpośrednio z ustalenia — `Context` z lokalizacji ustalenia, `Problem` ze szczegółów ustalenia, `Rule` i `Applies to` pozostaw jako puste miejsca do wypełnienia przez użytkownika. Pokaż proponowany wpis jako kompletny blok markdown i poproś użytkownika o edycję / potwierdzenie za pomocą Zapytaj użytkownika: ("Approve this entry?" / "Edit before saving" / "Cancel"). Po potwierdzeniu, dołącz wpis jako nową sekcję H2 do `context/foundation/lessons.md` — jeśli plik nie istnieje, utwórz go najpierw z tym kanonicznym 5-liniowym nagłówkiem (bez oddzielnego pliku szablonu; nagłówek jest osadzony w tekście tutaj):
 
   ```
   # Lessons Learned
@@ -422,7 +422,7 @@ Zaktualizuj zapisany raport o ostateczne decyzje. Oznacz zadanie przeglądu jako
 
 ## Uwagi
 
-- Jest to umiejętność **przeglądu**. Domyślnie analizuj i raportuj — dokonuj edycji tylko podczas sortowania, gdy użytkownik wyraźnie wybierze "Apply Fix" lub "Fix differently" dla konkretnego ustalenia.
+- To jest umiejętność **przeglądu**. Domyślnie analizuj i raportuj — dokonuj edycji tylko podczas sortowania, gdy użytkownik wyraźnie wybierze "Apply Fix" lub "Fix differently" dla konkretnego ustalenia.
 - Bądź konkretny. "src/auth/handler.ts:42 — SQL query built with string concatenation, vulnerable to injection" — a nie "there might be a security issue somewhere".
 - Nie oznaczaj preferencji stylistycznych, chyba że mają znaczenie. Jeśli kod działa i jest zgodny z planem, drobne różnice stylistyczne od istniejącego kodu są obserwacjami, a nie ostrzeżeniami.
 - Jeśli sam plan był wadliwy (np. zaplanowano niebezpieczne podejście), oznacz to — ten przegląd wychwytuje również problemy z planem.
