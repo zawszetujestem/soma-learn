@@ -19,3 +19,9 @@ dist/
 *.egg-info/
 staticfiles/*
 !staticfiles/.gitkeep
+node_modules/
+test-results/
+playwright-report/
+e2e.sqlite3
+e2e/.auth/
+e2e/.seed-state.json
