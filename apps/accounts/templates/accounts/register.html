@@ -3,15 +3,17 @@
 {% block title %}Rejestracja — SOMA{% endblock %}
 
 {% block content %}
-    <h1>Utwórz konto</h1>
+    <div class="card" style="max-width: 480px; margin: 0 auto;">
+        <h1>Utwórz konto</h1>
 
-    <p>Załóż konto, aby rozpocząć naukę z mentorem.</p>
+        <p class="muted">Załóż konto, aby rozpocząć naukę z mentorem.</p>
 
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Zarejestruj</button>
-    </form>
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn">Zarejestruj</button>
+        </form>
 
-    <p>Masz już konto? <a href="{% url 'accounts:login' %}">Zaloguj się</a>.</p>
+        <p>Masz już konto? <a href="{% url 'accounts:login' %}">Zaloguj się</a>.</p>
+    </div>
 {% endblock %}

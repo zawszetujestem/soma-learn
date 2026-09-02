@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Usuń konto — SOMA{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 520px; margin: 0 auto;">
+        <h1>Usuń konto</h1>
+        <p class="muted">
+            Usunięcie konta jest nieodwracalne: Twoje dane osobowe zostaną zanonimizowane,
+            a dostęp do kursów utracony. Relacje z mentorem zachowują wyłącznie metadane audytowe.
+        </p>
+        <form method="post" action="{% url 'accounts:delete-account' %}" class="stack">
+            {% csrf_token %}
+            <div style="display: flex; gap: 0.75rem;">
+                <button type="submit" class="btn danger">Usuń konto</button>
+                <a class="btn ghost" href="{% url 'learning:course-list' %}">Anuluj</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

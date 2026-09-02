@@ -35,6 +35,11 @@ def register(request: HttpRequest) -> HttpResponse:
 
 
 @login_required
+def delete_account_confirm(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/delete_confirm.html")
+
+
+@login_required
 @require_POST
 def delete_account(request: HttpRequest) -> HttpResponse:
     user = cast(User, request.user)

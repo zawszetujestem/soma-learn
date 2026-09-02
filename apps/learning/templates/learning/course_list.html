@@ -6,18 +6,24 @@
     <h1>Kursy</h1>
 
     {% if instances %}
-        <p>Wybierz kurs, aby kontynuować.</p>
-        <ul>
+        <p class="muted">Wybierz kurs, aby kontynuować.</p>
+        <ul class="course-list">
             {% for instance in instances %}
-                <li><a href="{% url 'learning:course-entry' instance.pk %}">{{ instance.course.title }}</a></li>
+                <li class="course-item">
+                    <div>
+                        <a class="title" href="{% url 'learning:course-entry' instance.pk %}">{{ instance.course.title }}</a>
+                        <div class="meta">
+                            {% if instance.mentor_id == user.pk %}Mentor{% else %}Uczeń{% endif %}
+                            · {{ instance.course.title }}
+                        </div>
+                    </div>
+                    <a class="btn" href="{% url 'learning:course-entry' instance.pk %}">Otwórz</a>
+                </li>
             {% endfor %}
         </ul>
     {% else %}
-        <p>Nie masz jeszcze żadnych kursów. Skontaktuj się z opiekunem, aby otrzymać dostęp do kursu.</p>
+        <div class="card">
+            <p>Nie masz jeszcze żadnych kursów. Skontaktuj się z opiekunem, aby otrzymać dostęp do kursu.</p>
+        </div>
     {% endif %}
-
-    <form method="post" action="{% url 'accounts:logout' %}">
-        {% csrf_token %}
-        <button type="submit">Wyloguj się</button>
-    </form>
 {% endblock %}

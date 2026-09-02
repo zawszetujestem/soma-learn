@@ -3,6 +3,31 @@
 {% block title %}{{ instance.course.title }} — SOMA{% endblock %}
 
 {% block content %}
-    <h1>{{ instance.course.title }}</h1>
     <p><a href="{% url 'learning:course-list' %}">&larr; Wróć do listy kursów</a></p>
+
+    <div class="card">
+        <h1>{{ instance.course.title }}</h1>
+
+        <div class="participants">
+            <div class="party">
+                <span class="label">Mentor</span>
+                {{ instance.mentor.email }}
+            </div>
+            {% if instance.student %}
+                <div class="party">
+                    <span class="label">Uczeń</span>
+                    {{ instance.student.email }}
+                </div>
+            {% else %}
+                <div class="party">
+                    <span class="label">Uczeń</span>
+                    <span class="muted">jeszcze nie zaakceptowano zaproszenia</span>
+                </div>
+            {% endif %}
+        </div>
+
+        <p class="muted">
+            Treść kursu, zadania i tablica cyklu pojawią się w kolejnych etapach.
+        </p>
+    </div>
 {% endblock %}
