@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Usuń kurs — SOMA{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 480px; margin: 0 auto;">
+        <h1>Usuń kurs</h1>
+
+        <p>Czy na pewno chcesz usunąć kurs „{{ course.title }}”? Tej operacji nie można cofnąć.</p>
+
+        <form method="post" style="display: flex; gap: 0.75rem;">
+            {% csrf_token %}
+            <button type="submit" class="btn danger">Usuń</button>
+            <a class="btn ghost" href="{% url 'learning:course-list' %}">Anuluj</a>
+        </form>
+    </div>
+{% endblock %}

@@ -5,8 +5,32 @@
 {% block content %}
     <h1>Kursy</h1>
 
+    {% if user.is_mentor %}
+        <section class="card manage-section">
+            <div class="section-head">
+                <h2>Moje kursy</h2>
+                <a class="btn" href="{% url 'learning:course-create' %}">Dodaj kurs</a>
+            </div>
+            {% if owned_courses %}
+                <ul class="course-list">
+                    {% for course in owned_courses %}
+                        <li class="course-item">
+                            <span class="title">{{ course.title }}</span>
+                            <div class="nav">
+                                <a class="btn ghost" href="{% url 'learning:course-edit' course.pk %}">Edytuj</a>
+                                <a class="btn danger" href="{% url 'learning:course-delete' course.pk %}">Usuń</a>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="muted">Nie masz jeszcze własnych kursów. Kliknij „Dodaj kurs”, aby utworzyć pierwszy.</p>
+            {% endif %}
+        </section>
+    {% endif %}
+
     {% if instances %}
-        <p class="muted">Wybierz kurs, aby kontynuować.</p>
+        <p class="muted">Kursy, do których masz dostęp:</p>
         <ul class="course-list">
             {% for instance in instances %}
                 <li class="course-item">

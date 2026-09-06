@@ -387,3 +387,19 @@ fieldset.role-picker legend {
     border-color: var(--brand);
     background: #eef2ff;
 }
+
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.section-head h2 {
+    margin: 0;
+}
+
+.manage-section {
+    margin-bottom: 1rem;
+}
