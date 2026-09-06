@@ -238,6 +238,19 @@ form.auth-form p {
     border: 1px solid #bfdbfe;
 }
 
+.notice.success {
+    background: #ecfdf5;
+    color: #0f766e;
+    border: 1px solid #a7f3d0;
+}
+
+.messages {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
 .course-list {
     list-style: none;
     padding: 0;

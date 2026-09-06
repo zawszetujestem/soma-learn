@@ -17,6 +17,7 @@
                         <li class="course-item">
                             <span class="title">{{ course.title }}</span>
                             <div class="nav">
+                                <a class="btn" href="{% url 'learning:course-instance-create' course.pk %}">Przypisz ucznia</a>
                                 <a class="btn ghost" href="{% url 'learning:course-edit' course.pk %}">Edytuj</a>
                                 <a class="btn danger" href="{% url 'learning:course-delete' course.pk %}">Usuń</a>
                             </div>
@@ -37,8 +38,11 @@
                     <div>
                         <a class="title" href="{% url 'learning:course-entry' instance.pk %}">{{ instance.course.title }}</a>
                         <div class="meta">
-                            {% if instance.mentor_id == user.pk %}Mentor{% else %}Uczeń{% endif %}
-                            · {{ instance.course.title }}
+                            {% if instance.mentor_id == user.pk %}
+                                Uczeń: {% if instance.student %}{{ instance.student.email }}{% else %}{{ instance.student_email }}{% endif %}
+                            {% else %}
+                                Mentor: {{ instance.mentor.email }}
+                            {% endif %}
                         </div>
                     </div>
                     <a class="btn" href="{% url 'learning:course-entry' instance.pk %}">Otwórz</a>

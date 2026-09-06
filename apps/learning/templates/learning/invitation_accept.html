@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Zaproszenie do kursu — SOMA{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 480px; margin: 0 auto;">
+        <h1>Zaproszenie do kursu</h1>
+
+        {% if error %}
+            <div class="notice error">{{ error }}</div>
+        {% elif invitation %}
+            <p>
+                Mentor <strong>{{ invitation.instance.mentor.email }}</strong> zaprasza Cię
+                do kursu <strong>{{ invitation.instance.course.title }}</strong>.
+            </p>
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn">Dołącz do kursu</button>
+            </form>
+        {% endif %}
+    </div>
+{% endblock %}

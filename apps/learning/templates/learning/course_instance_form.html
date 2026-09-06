@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Przypisz ucznia — {{ course.title }} — SOMA{% endblock %}
+
+{% block content %}
+    <p><a href="{% url 'learning:course-list' %}">&larr; Wróć do kursów</a></p>
+
+    <div class="card" style="max-width: 480px; margin: 0 auto;">
+        <h1>Przypisz ucznia</h1>
+        <p class="muted">Kurs: <strong>{{ course.title }}</strong></p>
+
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            <p>
+                {{ form.email.label_tag }}
+                {{ form.email }}
+                {{ form.email.errors }}
+            </p>
+            <p class="muted">
+                Jeśli adres e-mail istnieje już w systemie, uczeń zostanie przypisany od razu.
+                W przeciwnym razie wyślemy zaproszenie z linkiem do kursu.
+            </p>
+            <button type="submit" class="btn">Przypisz ucznia</button>
+        </form>
+    </div>
+{% endblock %}

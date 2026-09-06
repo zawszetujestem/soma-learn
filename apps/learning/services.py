@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -160,4 +161,41 @@ def students_with_active_relationship(*, mentor: User, course: Course) -> QueryS
         )
         .distinct()
         .order_by("pk")
+    )
+
+
+@transaction.atomic
+def assign_student(
+    *, mentor: User, course: Course, email: str
+) -> tuple[CourseInstance, bool, str | None]:
+    if not mentor.is_mentor:
+        raise MentorRoleRequired("Only mentors may assign students to courses.")
+    normalized = _normalize_email(email)
+    student = UserModel.objects.filter(email__iexact=normalized, is_active=True).first()
+    if student is not None:
+        instance = _get_or_create_instance(mentor=mentor, course=course, email=normalized)
+        instance.student = student
+        instance.save(update_fields=["student"])
+        return instance, False, None
+    invitation, raw_token = reissue_invitation(mentor=mentor, course=course, email=normalized)
+    return invitation.instance, True, raw_token
+
+
+def get_invitation_for_token(raw_token: str) -> Invitation | None:
+    return (
+        Invitation.objects.filter(token_hash=_hash_token(raw_token))
+        .select_related("instance", "instance__course", "instance__mentor")
+        .first()
+    )
+
+
+def send_invitation_email(*, email: str, invitation_url: str) -> None:
+    send_mail(
+        subject="Zaproszenie do kursu SOMA Learn",
+        message=(
+            "Zostałeś(aś) zaproszony(-a) do kursu w aplikacji SOMA Learn.\n\n"
+            f"Aby dołączyć do kursu, otwórz poniższy link:\n{invitation_url}\n"
+        ),
+        from_email=None,
+        recipient_list=[email],
     )

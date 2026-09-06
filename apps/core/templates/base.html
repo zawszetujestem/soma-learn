@@ -33,6 +33,13 @@
     </header>
 
     <main>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="notice {{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
 

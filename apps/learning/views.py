@@ -1,16 +1,27 @@
 from typing import cast
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views import View
 
 from apps.accounts.models import User
 
-from .forms import CourseForm
-from .models import Course, CourseInstance
+from .forms import AssignStudentForm, CourseForm
+from .models import Course, CourseInstance, Invitation
+from .services import (
+    EmailMismatchError,
+    InvitationNotUsableError,
+    StudentRoleRequired,
+    accept_invitation,
+    assign_student,
+    get_invitation_for_token,
+    send_invitation_email,
+)
 
 
 def _require_mentor(user: User) -> None:
@@ -103,3 +114,87 @@ class CourseDeleteView(LoginRequiredMixin, View):
         course = get_object_or_404(Course, pk=pk, owner=user)
         course.delete()
         return redirect("learning:course-list")
+
+
+class CourseInstanceCreateView(LoginRequiredMixin, View):
+    def get(self, request: HttpRequest, pk: int) -> HttpResponse:
+        user = cast(User, request.user)
+        _require_mentor(user)
+        course = get_object_or_404(Course, pk=pk, owner=user)
+        return render(
+            request,
+            "learning/course_instance_form.html",
+            {"course": course, "form": AssignStudentForm()},
+        )
+
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
+        user = cast(User, request.user)
+        _require_mentor(user)
+        course = get_object_or_404(Course, pk=pk, owner=user)
+        form = AssignStudentForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data["email"]
+            instance, invited, raw_token = assign_student(
+                mentor=user, course=course, email=email
+            )
+            if invited and raw_token is not None:
+                invitation_url = request.build_absolute_uri(
+                    reverse("learning:invitation-accept", args=[raw_token])
+                )
+                send_invitation_email(email=email, invitation_url=invitation_url)
+                messages.success(
+                    request,
+                    f"Wysłano zaproszenie na adres {email}.",
+                )
+            else:
+                messages.success(request, f"Przypisano ucznia {email} do kursu.")
+            return redirect("learning:course-list")
+        return render(
+            request,
+            "learning/course_instance_form.html",
+            {"course": course, "form": form},
+        )
+
+
+class InvitationAcceptView(LoginRequiredMixin, View):
+    def get(self, request: HttpRequest, token: str) -> HttpResponse:
+        invitation = get_invitation_for_token(token)
+        context: dict[str, object] = {"token": token}
+        if invitation is None or invitation.status != Invitation.Status.PENDING:
+            context["error"] = "Zaproszenie jest nieważne lub zostało już wykorzystane."
+        elif invitation.is_expired:
+            context["error"] = "Zaproszenie wygasło."
+        else:
+            context["invitation"] = invitation
+        return render(request, "learning/invitation_accept.html", context)
+
+    def post(self, request: HttpRequest, token: str) -> HttpResponse:
+        user = cast(User, request.user)
+        invitation = get_invitation_for_token(token)
+        if invitation is None:
+            return render(
+                request,
+                "learning/invitation_accept.html",
+                {"token": token, "error": "Zaproszenie jest nieważne."},
+            )
+        try:
+            relationship = accept_invitation(raw_token=token, student=user)
+        except StudentRoleRequired:
+            return render(
+                request,
+                "learning/invitation_accept.html",
+                {"token": token, "error": "Tylko uczniowie mogą akceptować zaproszenia."},
+            )
+        except EmailMismatchError:
+            return render(
+                request,
+                "learning/invitation_accept.html",
+                {"token": token, "error": "Zaproszenie dotyczy innego adresu e-mail."},
+            )
+        except InvitationNotUsableError:
+            return render(
+                request,
+                "learning/invitation_accept.html",
+                {"token": token, "error": "Zaproszenie jest nieważne lub wygasło."},
+            )
+        return redirect("learning:course-entry", pk=relationship.instance_id)
