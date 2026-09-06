@@ -18,8 +18,7 @@ WORKDIR /app
 RUN useradd --create-home --uid 10001 appuser
 
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY --chown=appuser:appuser . .
 
@@ -33,4 +32,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8000\")}/healthz/', timeout=2)"
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8000} soma_config.wsgi:application"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn --bind 0.0.0.0:${PORT:-8000} soma_config.wsgi:application"]

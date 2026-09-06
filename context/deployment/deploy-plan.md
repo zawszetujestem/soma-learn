@@ -4,8 +4,9 @@
 
 - Plan reviewed: 2026-08-31
 - Local preparation: completed
-- Railway resource creation: not approved
-- Production deployment: blocked by user decision to avoid costs
+- Railway resource creation: completed
+- Production deployment: completed (2026-09-06)
+- Production URL: https://web-production-f3618.up.railway.app
 - Platform decision: @context/foundation/infrastructure.md
 - Stack assessment: @context/foundation/stack-assessment.md
 - Health baseline: @context/foundation/health-check.md
@@ -64,8 +65,14 @@ Komendy są dokumentacją i nie będą uruchomione w tym wykonaniu:
 - Standalone container: healthy; `/healthz/` returned HTTP 200; process UID was 10001.
 - Docker Compose: healthy app plus PostgreSQL 18.6; migrations applied; Django confirmed the PostgreSQL connection.
 - Local URL: `http://localhost:8000/healthz/`.
-- Railway resources: not created.
-- Production URL: not available because production deployment was not approved.
+- Railway resources: created (project `soma-learn`, services `Postgres` and `web`).
+- Production URL: https://web-production-f3618.up.railway.app (`/healthz/` returns HTTP 200, `{"status":"ok"}`).
+
+## Production Adjustments (2026-09-06)
+
+- `Dockerfile`: removed BuildKit cache mount (`--mount=type=cache`) — Railway's builder rejects it without its `cacheKey` prefix. Migrations moved into the container `CMD` (`migrate --noinput && gunicorn`) instead of platform-specific config.
+- `railway.json` was created then removed: Config as Code is deprecated (breaks 2026-12-01) and applied inconsistently.
+- `SECRET_KEY` was generated and stored as a Railway variable (never committed).
 
 ## Secrets and Permissions
 
