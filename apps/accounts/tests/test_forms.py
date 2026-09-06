@@ -43,6 +43,23 @@ class RegistrationFormTests(TestCase):
         self.assertTrue(user.check_password("strong-pass-123"))
         self.assertEqual(user.email, "New.Student@example.com")
 
+    def test_save_creates_mentor_when_role_mentor(self) -> None:
+        form = RegistrationForm(
+            data={
+                "email": "new.mentor@example.com",
+                "password1": "strong-pass-123",
+                "password2": "strong-pass-123",
+                "role": "mentor",
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+        user = form.save()
+
+        self.assertTrue(user.is_mentor)
+        self.assertFalse(user.is_student)
+        self.assertTrue(user.check_password("strong-pass-123"))
+
     def test_duplicate_email_rejected(self) -> None:
         User.objects.create_user(email="duplicate@example.com", password="pass1234")
 

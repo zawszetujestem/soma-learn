@@ -38,6 +38,26 @@ class AccountViewTests(TestCase):
         )
         self.assertTrue(User.objects.filter(email="new.mentor@example.com").exists())
 
+    def test_register_with_mentor_role_sets_flags(self) -> None:
+        response = self.client.post(
+            reverse("accounts:register"),
+            data={
+                "email": "mentor.role@example.com",
+                "password1": "strong-pass-123",
+                "password2": "strong-pass-123",
+                "role": "mentor",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("learning:course-list"),
+            fetch_redirect_response=False,
+        )
+        user = User.objects.get(email="mentor.role@example.com")
+        self.assertTrue(user.is_mentor)
+        self.assertFalse(user.is_student)
+
     def test_register_non_email_integrity_error_propagates(self) -> None:
         with patch(
             "apps.accounts.views.RegistrationForm.save",

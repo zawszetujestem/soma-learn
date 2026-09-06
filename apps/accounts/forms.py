@@ -12,6 +12,13 @@ class RegistrationForm(forms.Form):
     email = forms.EmailField(label="Email", max_length=254)
     password1 = forms.CharField(label="Hasło", widget=forms.PasswordInput)
     password2 = forms.CharField(label="Powtórz hasło", widget=forms.PasswordInput)
+    role = forms.ChoiceField(
+        label="Rola",
+        choices=[("student", "Uczeń"), ("mentor", "Mentor")],
+        widget=forms.RadioSelect,
+        initial="student",
+        required=False,
+    )
 
     def clean_email(self) -> str:
         email = self.cleaned_data["email"]
@@ -30,6 +37,10 @@ class RegistrationForm(forms.Form):
         return cleaned
 
     def save(self) -> User:
+        is_mentor = self.cleaned_data.get("role") == "mentor"
         return User.objects.create_user(
-            email=self.cleaned_data["email"], password=self.cleaned_data["password1"]
+            email=self.cleaned_data["email"],
+            password=self.cleaned_data["password1"],
+            is_mentor=is_mentor,
+            is_student=not is_mentor,
         )

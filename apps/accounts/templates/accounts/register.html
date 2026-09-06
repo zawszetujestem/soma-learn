@@ -10,7 +10,39 @@
 
         <form method="post" class="auth-form">
             {% csrf_token %}
-            {{ form.as_p }}
+            <p>
+                {{ form.email.label_tag }}
+                {{ form.email }}
+                {{ form.email.errors }}
+            </p>
+            <p>
+                {{ form.password1.label_tag }}
+                {{ form.password1 }}
+                {{ form.password1.errors }}
+            </p>
+            <p>
+                {{ form.password2.label_tag }}
+                {{ form.password2 }}
+                {{ form.password2.errors }}
+            </p>
+
+            <fieldset class="role-picker">
+                <legend>Rola konta</legend>
+                <div class="role-options">
+                    <label class="role-option">
+                        <input type="radio" name="role" value="student"{% if form.role.value == "student" %} checked{% endif %}>
+                        <span class="role-title">Uczeń</span>
+                        <span class="role-desc">Uczę się pod opieką mentora</span>
+                    </label>
+                    <label class="role-option">
+                        <input type="radio" name="role" value="mentor"{% if form.role.value == "mentor" %} checked{% endif %}>
+                        <span class="role-title">Mentor</span>
+                        <span class="role-desc">Planuję i sprawdzam postępy uczniów</span>
+                    </label>
+                </div>
+                {{ form.role.errors }}
+            </fieldset>
+
             <button type="submit" class="btn">Zarejestruj</button>
         </form>
 
