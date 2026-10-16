@@ -1,1 +1,0 @@
-Proszę rozszerzyć plan o wymagania wstępne — jak skonfigurować CLI dla {{platform_name + extra tooling}}

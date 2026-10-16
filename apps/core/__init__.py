@@ -1,1 +1,0 @@
-"""Core operational endpoints."""

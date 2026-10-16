@@ -1,1 +1,0 @@
-Zapisz ten plan w `context/changes/deployment/deployment-plan.md`
