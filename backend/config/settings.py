@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -55,16 +56,45 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'soma_learn'),
-        'USER': os.getenv('POSTGRES_USER', 'soma'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'soma123'),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
+if os.getenv('USE_SQLITE', 'false').lower() in ('true', '1', 'yes'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+elif os.getenv('DATABASE_URL'):
+    database_url = urlparse(os.environ['DATABASE_URL'])
+    if database_url.scheme not in ('postgres', 'postgresql'):
+        raise ValueError('DATABASE_URL must use the postgres or postgresql scheme.')
+
+    database_options = {
+        key: values[-1]
+        for key, values in parse_qs(database_url.query).items()
+        if key in ('sslmode', 'connect_timeout', 'application_name')
+    }
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': unquote(database_url.path.lstrip('/')),
+            'USER': unquote(database_url.username or ''),
+            'PASSWORD': unquote(database_url.password or ''),
+            'HOST': database_url.hostname or 'localhost',
+            'PORT': str(database_url.port or 5432),
+            **({'OPTIONS': database_options} if database_options else {}),
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB', 'soma_learn'),
+            'USER': os.getenv('POSTGRES_USER', 'soma'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'soma123'),
+            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
