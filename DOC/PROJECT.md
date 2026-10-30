@@ -34,20 +34,28 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 ## Status pracy — 25.05.2026
 
 ### Backend (✅ w trakcie)
-- Django 4.2 + DRF 3.17
+- Django 6.1 + DRF 3.18
 - Niestandardowy model User z rolami (student, mentor, owner, admin)
 - Endpointy API:
   - `POST /api/auth/register/` — rejestracja ucznia/mentora
-  - `POST /api/auth/login/` — logowanie email + hasło
-  - `POST /api/auth/social-login/` — social login (Google, Facebook, iCloud)
+  - `POST /api/auth/login/` — wyłączony (410); logowanie email + hasło + kod przez allauth Headless (`/_allauth/browser/v1/`)
+  - `POST /api/auth/social-login/` — wyłączony (410); logowanie Google przez allauth Headless
   - `GET /api/auth/verify-email/` — weryfikacja email
   - `POST /api/auth/password-reset/` — reset hasła
   - `GET /api/auth/me/` — dane bieżącego użytkownika
 - Baza danych: PostgreSQL
 - Automatyczne tworzenie superusera z zmiennych `.env`
 
-### Frontend (⏳ do zrobienia)
-- Struktura React przygotowana do dalszego rozwoju
+### Frontend (prototyp informacyjny)
+- React 19 + Vite 8, React Router 7; testy Vitest + Testing Library
+- `/` przedstawia SOMA oraz sekcje dla ucznia, rodzica i mentora; pierwszą grupą są ósmoklasiści, maturzyści są planowani później
+- `/kursy` pokazuje pusty stan bez ofert; `/logowanie` działa z API allauth Headless (email + hasło + kod, Google tylko dla zweryfikowanych kont)
+- Zaproszenia uczniów przez mentora są planowane, ale niezaimplementowane
+- Końcowe QA prototypu: `npm test` 10/10, `npm run build` poprawny, `get_errors` bez błędów; QA nie wykazał blockerów
+- Ręczna inspekcja Chrome/CDP: trasy otwierają się bezpośrednio; na `/` `document.scrollWidth` odpowiadał szerokości viewportu 320×844 i 390×844, a na `/kursy` i `/logowanie` wynosił 390 px przy viewportcie 390×844
+- Zrzuty ekranu desktop i mobile obejrzano wizualnie; kontrasty znalezione podczas QA poprawiono
+- Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG
+- Instrukcje uruchomienia i testów: `../frontend/README.md`
 
 ### Dokumentacja (✅)
 - Framework SOMA opisany i sformatowany

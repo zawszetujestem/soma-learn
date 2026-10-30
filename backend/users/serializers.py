@@ -1,5 +1,9 @@
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from allauth.account.models import EmailAddress
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
@@ -30,7 +34,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    role = serializers.ChoiceField(choices=[Role.STUDENT, Role.MENTOR])
+    role = serializers.ChoiceField(choices=[Role.STUDENT, Role.MENTOR], write_only=True)
 
     class Meta:
         model = User
@@ -40,16 +44,27 @@ class RegisterSerializer(serializers.ModelSerializer):
             'email',
             'password',
             'role',
-            'age',
             'specialization',
             'contact',
             'bio',
         ]
 
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError('A user is already registered with this email address.')
+        return email
+
     def validate(self, data):
         role = data.get('role')
         if role == Role.MENTOR and not data.get('specialization'):
             raise serializers.ValidationError({'specialization': 'Mentors must provide a specialization.'})
+        try:
+            validate_password(data['password'], User(**{
+                key: value for key, value in data.items() if key not in ('password', 'role')
+            }))
+        except ValidationError as error:
+            raise serializers.ValidationError({'password': error.messages})
         return data
 
     def create(self, validated_data):
@@ -157,8 +172,14 @@ class EmailVerificationSerializer(serializers.Serializer):
         data['user'] = user
         return data
 
+    @transaction.atomic
     def save(self):
         user = self.validated_data['user']
+        address, _ = EmailAddress.objects.get_or_create(
+            user=user, email=user.email, defaults={'primary': True},
+        )
+        if not address.set_verified():
+            raise serializers.ValidationError('Email address is already associated with another account.')
         user.is_email_confirmed = True
         user.save(update_fields=['is_email_confirmed'])
         return user

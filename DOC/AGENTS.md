@@ -2,6 +2,8 @@
 
 Ta sekcja opisuje agentów, którzy będą współpracować przy tworzeniu aplikacji.
 
+Konfiguracje agentów dla GitHub Copilot w VS Code znajdują się w `.github/agents/`. Pełny przepływ prowadzi `SOMA Orchestrator`; uruchom go z listy agentów albo użyj promptu `/soma-feature` w chacie. Koordynator najpierw doprecyzowuje wymagania z użytkownikiem i właściwymi specjalistami, a implementację rozpoczyna dopiero po potwierdzeniu, że nie ma istotnych niewiadomych. Następnie prowadzi planowanie, implementację, testy, audyt QA i aktualizację dokumentacji.
+
 ## Agenci
 
 1. `Framework Analyst` – analizuje i ulepsza framework SOMA.

@@ -2,6 +2,8 @@
 
 Ten katalog zawiera szczegółowe opisy poszczególnych agentów oraz ich obowiązki.
 
+Konfiguracje agentów dla VS Code znajdują się w `.github/agents/`. Do realizacji pełnej funkcjonalności użyj `SOMA Orchestrator` albo uruchom prompt `/soma-feature` w chacie. Koordynator najpierw zbiera pytania od użytkownika i agentów, a kodowanie zaczyna po wyjaśnieniu wszystkich istotnych niejasności. Potem prowadzi pracę od planowania przez implementację i QA/audyt po dokumentację.
+
 Zawiera agenty:
 - `01-framework-analyst.md`
 - `02-business-analyst.md`

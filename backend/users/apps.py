@@ -9,7 +9,16 @@ class UsersConfig(AppConfig):
     name = 'users'
 
     def ready(self):
+        from allauth.account.models import EmailAddress
+        from allauth.account.signals import email_confirmed
         from .models import Role, User
+
+        def sync_confirmed_email(sender, request, email_address, **kwargs):
+            User.objects.filter(pk=email_address.user_id, email__iexact=email_address.email).update(
+                is_email_confirmed=True,
+            )
+
+        email_confirmed.connect(sync_confirmed_email, weak=False, dispatch_uid='users.sync_confirmed_email')
 
         def create_superuser(sender, **kwargs):
             email = os.getenv('SUPERUSER_EMAIL', 'admin@soma-learn.local')
@@ -30,4 +39,11 @@ class UsersConfig(AppConfig):
                 user.save()
                 print(f'Superuser "{email}" created successfully.')
 
-        post_migrate.connect(create_superuser, sender=self)
+            user = User.objects.get(email=email)
+            if user.is_superuser and user.is_email_confirmed:
+                EmailAddress.objects.update_or_create(
+                    user=user, email=user.email,
+                    defaults={'primary': True, 'verified': True},
+                )
+
+        post_migrate.connect(create_superuser, sender=self, weak=False)
