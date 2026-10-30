@@ -19,13 +19,28 @@ export async function ensureCsrf() {
   await initialization
 }
 
+export async function getJson(url, headers = {}) {
+  await ensureCsrf()
+  const response = await fetch(url, { method: 'GET', credentials: 'include', headers })
+  const payload = await response.json().catch(() => ({}))
+  return { response, payload }
+}
+
 export async function postJson(url, body = {}) {
+  return sendJson('POST', url, body)
+}
+
+export async function deleteJson(url) {
+  return sendJson('DELETE', url)
+}
+
+async function sendJson(method, url, body) {
   await ensureCsrf()
   const response = await fetch(url, {
-    method: 'POST',
+    method,
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
   const payload = await response.json().catch(() => ({}))
   return { response, payload }
@@ -63,4 +78,12 @@ export async function exchangeToken() {
     throw new Error('Nie udało się zalogować. Sprawdź, czy konto ma potwierdzony email, i zaloguj się ponownie.')
   }
   sessionStorage.setItem('token', payload.token)
+}
+
+export async function logout() {
+  try {
+    await deleteJson('/_allauth/browser/v1/auth/session')
+  } finally {
+    sessionStorage.removeItem('token')
+  }
 }

@@ -1,5 +1,15 @@
-import { Link, NavLink, Route, Routes } from 'react-router-dom'
-import { GoogleCallbackPage, LoginPage, RegistrationPage, VerificationPage } from './AuthPages.jsx'
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { GoogleCallbackPage, LoginPage, PasswordResetPage, RegistrationPage, VerificationPage } from './AuthPages.jsx'
+import { logout } from './authApi.js'
+import CoursesPage from './courses/CoursesPage.jsx'
+import CourseDetailPage from './courses/CourseDetailPage.jsx'
+import CourseEditorPage from './courses/CourseEditorPage.jsx'
+import { getToken } from './courses/api.js'
+import InstancePage from './courses/InstancePage.jsx'
+import JoinByTokenPage from './courses/JoinByTokenPage.jsx'
+import MentorCourseDetailPage from './courses/MentorCourseDetailPage.jsx'
+import MyCoursesPage from './courses/MyCoursesPage.jsx'
+import { RequireAuth, RequireManager } from './courses/RequireAuth.jsx'
 
 const learningSteps = [
   {
@@ -34,7 +44,20 @@ const learningSteps = [
   },
 ]
 
+function GuestOnly({ children }) {
+  return getToken() ? <Navigate to="/kursy" replace /> : children
+}
+
 function SiteHeader() {
+  useLocation()
+  const navigate = useNavigate()
+  const loggedIn = Boolean(getToken())
+
+  async function handleLogout() {
+    await logout().catch(() => {})
+    navigate('/')
+  }
+
   return (
     <header className="site-header">
       <Link className="wordmark" to="/" aria-label="SOMA Learn, strona główna">
@@ -50,9 +73,15 @@ function SiteHeader() {
         <NavLink className={({ isActive }) => `nav-anchor${isActive ? ' is-active' : ''}`} to="/kursy">
           Kursy
         </NavLink>
-        <NavLink className={({ isActive }) => `nav-login${isActive ? ' is-active' : ''}`} to="/logowanie">
-          Logowanie <span aria-hidden="true">↗</span>
-        </NavLink>
+        {loggedIn ? (
+          <button className="nav-login nav-logout" type="button" onClick={handleLogout}>
+            Wyloguj
+          </button>
+        ) : (
+          <NavLink className={({ isActive }) => `nav-login${isActive ? ' is-active' : ''}`} to="/logowanie">
+            Logowanie <span aria-hidden="true">↗</span>
+          </NavLink>
+        )}
       </nav>
     </header>
   )
@@ -172,18 +201,6 @@ function HomePage() {
   )
 }
 
-function CoursesPage() {
-  return (
-    <main className="simple-page page-width">
-      <p className="eyebrow">Przestrzeń w przygotowaniu</p>
-      <h1>Kursy pojawią się wkrótce</h1>
-      <p>Wracamy tu, gdy będzie co wspólnie odkrywać.</p>
-      <Link className="text-link" to="/">Wróć na stronę główną <span aria-hidden="true">↗</span></Link>
-      <div className="simple-page-art" aria-hidden="true"><span>01</span><span>02</span><span>03</span></div>
-    </main>
-  )
-}
-
 function NotFoundPage() {
   return (
     <main className="simple-page page-width">
@@ -200,8 +217,19 @@ export default function App() {
       <SiteHeader />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/kursy" element={<CoursesPage />} />
-        <Route path="/logowanie" element={<LoginPage />} />
+        <Route element={<RequireAuth />}>
+          <Route path="/kursy" element={<CoursesPage />} />
+          <Route path="/kursy/instancje/:id" element={<InstancePage />} />
+          <Route path="/kursy/dolacz/:token" element={<JoinByTokenPage />} />
+          <Route path="/kursy/moje" element={<RequireManager />}>
+            <Route index element={<MyCoursesPage />} />
+            <Route path="nowy" element={<CourseEditorPage />} />
+            <Route path=":id" element={<MentorCourseDetailPage />} />
+          </Route>
+          <Route path="/kursy/:id" element={<CourseDetailPage />} />
+        </Route>
+        <Route path="/logowanie" element={<GuestOnly><LoginPage /></GuestOnly>} />
+        <Route path="/logowanie/reset-hasla" element={<GuestOnly><PasswordResetPage /></GuestOnly>} />
         <Route path="/logowanie/google/callback" element={<GoogleCallbackPage />} />
         <Route path="/rejestracja" element={<RegistrationPage />} />
         <Route path="/potwierdzenie-email" element={<VerificationPage />} />

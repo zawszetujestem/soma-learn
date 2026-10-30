@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.FRONTEND_BASE_URL': JSON.stringify(env.FRONTEND_BASE_URL || ''),
     },
     server: {
+      watch: { usePolling: env.VITE_USE_POLLING === 'true' },
       proxy: Object.fromEntries(['/api', '/_allauth', '/accounts'].map((path) => [path, { target, changeOrigin: true }])),
     },
     test: {

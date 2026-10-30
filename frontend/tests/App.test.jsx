@@ -171,11 +171,14 @@ describe('SOMA Learn public pages', () => {
     expect(screen.getByRole('link', { name: /logowanie/i })).toHaveAttribute('href', '/logowanie')
   })
 
-  it('shows a short empty state on the courses route', () => {
+  it('redirects the courses route to login when the user is not signed in', async () => {
+    sessionStorage.clear()
+    vi.stubGlobal('fetch', vi.fn())
+
     renderAt('/kursy')
 
-    expect(screen.getByRole('heading', { name: /kursy pojawią się wkrótce/i })).toBeInTheDocument()
-    expect(screen.queryByText(/zł|kup teraz|wybierz kurs/i)).not.toBeInTheDocument()
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /kursy pojawią się wkrótce/i })).not.toBeInTheDocument()
   })
 
   it('offers accessible email and password controls for login', () => {

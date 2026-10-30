@@ -1,9 +1,101 @@
+name: soma-learn-local-dev
+
 services:
-  mailpit:
-    image: axllent/mailpit:latest
-    ports:
-      - "1026:1025"
-      - "8026:8025"
+  db:
+    image: postgres:18-alpine
     environment:
-      MP_SMTP_AUTH_ACCEPT_ANY: "1"
-      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      POSTGRES_DB: ${DOCKER_POSTGRES_DB:-soma_local}
+      POSTGRES_USER: ${DOCKER_POSTGRES_USER:-soma_local}
+      POSTGRES_PASSWORD: ${DOCKER_POSTGRES_PASSWORD:-local-only-db-password}
+    volumes:
+      - pg18-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8001"
+    environment:
+      DEBUG: "true"
+      SECRET_KEY: ${DOCKER_SECRET_KEY:-local-only-not-for-production-secret-key}
+      USE_SQLITE: "false"
+      DATABASE_URL: ""
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${DOCKER_POSTGRES_DB:-soma_local}
+      POSTGRES_USER: ${DOCKER_POSTGRES_USER:-soma_local}
+      POSTGRES_PASSWORD: ${DOCKER_POSTGRES_PASSWORD:-local-only-db-password}
+      SUPERUSER_EMAIL: ${DOCKER_SUPERUSER_EMAIL:-admin@soma-learn.local}
+      SUPERUSER_PASSWORD: ${DOCKER_SUPERUSER_PASSWORD:-Local-Only-Admin-482!}
+      SUPERUSER_FIRST_NAME: ${DOCKER_SUPERUSER_FIRST_NAME:-Local}
+      SUPERUSER_LAST_NAME: ${DOCKER_SUPERUSER_LAST_NAME:-Admin}
+      ALLOWED_HOSTS: backend,localhost,127.0.0.1,testserver
+      FRONTEND_BASE_URL: http://localhost:5174
+      CORS_ALLOWED_ORIGINS: http://localhost:5174,http://127.0.0.1:5174
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "false"
+      EMAIL_HOST_USER: ""
+      EMAIL_HOST_PASSWORD: ""
+      DEFAULT_FROM_EMAIL: noreply@soma-learn.local
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/admin/login/', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  frontend:
+    build: ./frontend
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0 --port 5174 --strictPort"
+    environment:
+      VITE_BACKEND_URL: http://backend:8001
+      FRONTEND_BASE_URL: http://localhost:5174
+      VITE_USE_POLLING: "true"
+    ports:
+      - "127.0.0.1:5174:5174"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.1
+    ports:
+      - "127.0.0.1:1027:1025"
+      - "127.0.0.1:8027:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pg18-data:
+    name: soma-learn-local-dev-pg18-data
+  frontend-node-modules:
+    name: soma-learn-local-dev-frontend-node-modules

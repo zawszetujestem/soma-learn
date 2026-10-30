@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { connectionError, csrfToken, ensureCsrf, exchangeToken, postJson, responseError } from './authApi.js'
+import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, postJson, responseError } from './authApi.js'
+import { clearToken } from './courses/api.js'
 
 function AuthLayout({ title, children }) {
   return (
@@ -137,6 +138,134 @@ export function VerificationPage() {
   )
 }
 
+export function PasswordResetPage() {
+  const [stage, setStage] = useState('email')
+  const [email, setEmail] = useState('')
+  const [resetKey, setResetKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const csrf = useCsrf()
+
+  function resetError(response, payload) {
+    if (response.status === 409) return 'Sesja resetowania hasła wygasła. Rozpocznij ponownie.'
+    if (response.status === 400 && payload.errors?.some((error) => error.param === 'key')) {
+      return 'Kod jest nieprawidłowy lub wygasł.'
+    }
+    const passwordError = payload.errors?.find((error) => error.param === 'password')
+    if (passwordError) return `Hasło: ${passwordError.message}`
+    return responseError(response, payload)
+  }
+
+  async function endActiveSession() {
+    await deleteJson('/_allauth/browser/v1/auth/session')
+    clearToken()
+  }
+
+  async function requestCode(address) {
+    const send = () => postJson('/_allauth/browser/v1/auth/password/request', { email: address })
+    let { response, payload } = await send()
+    if (payload.meta?.is_authenticated === true) {
+      await endActiveSession()
+      const retry = await send()
+      response = retry.response
+      payload = retry.payload
+    }
+    if (response.status === 401 && payload.data?.flows?.some((flow) => flow.id === 'password_reset_by_code' && flow.is_pending)) {
+      setEmail(address)
+      setStage('code')
+      setNotice('Jeśli konto z tym adresem istnieje, wysłaliśmy na nie kod resetujący.')
+    } else {
+      setError(responseError(response, payload))
+    }
+  }
+
+  async function verifyCode(key) {
+    const { response, payload } = await getJson('/_allauth/browser/v1/auth/password/reset', { 'X-Password-Reset-Key': key })
+    if ([200, 401].includes(response.status) && !payload.errors?.length) {
+      setResetKey(key)
+      setNotice('')
+      setStage('password')
+    } else {
+      setError(resetError(response, payload))
+    }
+  }
+
+  async function resetPassword(password) {
+    const { response, payload } = await postJson('/_allauth/browser/v1/auth/password/reset', { key: resetKey, password })
+    if ([200, 401].includes(response.status) && !payload.errors?.length) setStage('done')
+    else setError(resetError(response, payload))
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (busy) return
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      if (stage === 'email') await requestCode(String(form.get('email')).trim())
+      else if (stage === 'code') await verifyCode(String(form.get('code')).trim())
+      else if (stage === 'password') await resetPassword(String(form.get('password')))
+    } catch {
+      setError(connectionError)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function resend() {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await requestCode(email)
+    } catch {
+      setError(connectionError)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const title = {
+    email: 'Resetowanie hasła',
+    code: 'Sprawdź swoją skrzynkę',
+    password: 'Ustaw nowe hasło',
+    done: 'Hasło zmienione',
+  }[stage]
+
+  return (
+    <AuthLayout title={title}>
+      {stage === 'done' ? <>
+        <p className="auth-status" role="status">Hasło zostało zmienione. Zaloguj się nowym hasłem.</p>
+        <Link className="text-link" to="/logowanie">Przejdź do logowania</Link>
+      </> : <form key={stage} onSubmit={submit} aria-busy={busy}>
+        {stage === 'email' && <>
+          <p>Podaj adres email powiązany z kontem. Wyślemy na niego kod resetujący.</p>
+          <label htmlFor="reset-email">Email</label>
+          <input id="reset-email" name="email" type="email" autoComplete="email" required disabled={busy} />
+          <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Wysyłanie…' : 'Wyślij kod'}</button>
+        </>}
+        {stage === 'code' && <>
+          <label htmlFor="reset-code">Kod resetujący</label>
+          <input id="reset-code" name="code" autoComplete="one-time-code" autoFocus required disabled={busy} />
+          <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Weryfikowanie…' : 'Potwierdź kod'}</button>
+          <button className="button button-secondary" type="button" onClick={resend} disabled={busy}>Wyślij kod ponownie</button>
+        </>}
+        {stage === 'password' && <>
+          <label htmlFor="reset-password">Nowe hasło</label>
+          <input id="reset-password" name="password" type="password" autoComplete="new-password" required disabled={busy} />
+          <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Zapisywanie…' : 'Zmień hasło'}</button>
+        </>}
+      </form>}
+      {(error || csrf.error) && <p className="auth-error" role="alert">{error || csrf.error}</p>}
+      {notice && <p className="auth-status" role="status">{notice}</p>}
+      {stage !== 'done' && <p className="auth-links"><Link className="text-link" to="/logowanie">Wróć do logowania</Link></p>}
+    </AuthLayout>
+  )
+}
+
 const frontendBase = import.meta.env.FRONTEND_BASE_URL || window.location.origin
 const googleCallback = new URL('/logowanie/google/callback', frontendBase).href
 
@@ -194,6 +323,8 @@ export function LoginPage() {
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
+        } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
+          await finishLogin()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
         } else {
@@ -282,6 +413,7 @@ export function LoginPage() {
           <button className="button button-secondary" type="submit" disabled={!csrf.ready || busy}>Zaloguj przez Google</button>
         </form>
         <p className="auth-links">Nie masz konta? <Link className="text-link" to="/rejestracja">Zarejestruj się</Link></p>
+        <p className="auth-links">Nie pamiętasz hasła? <Link className="text-link" to="/logowanie/reset-hasla">Zresetuj hasło</Link></p>
       </>}
       {stage === 'complete' && <Link className="text-link" to="/kursy">Przejdź do kursów</Link>}
     </AuthLayout>

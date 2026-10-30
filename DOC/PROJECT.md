@@ -29,7 +29,7 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - ✅ konfiguracja Postgresa i automatyczne tworzenie superusera,
 - ⏳ przygotować pierwsze user stories,
 - ⏳ zamienić user stories na zadania programistyczne,
-- ⏳ kontynuować implementację modeli kursów i instancji kursu.
+- ✅ zaimplementować modele kursów, zadań i instancji wraz z API i widokami frontendu.
 
 ## Status pracy — 25.05.2026
 
@@ -49,13 +49,20 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 ### Frontend (prototyp informacyjny)
 - React 19 + Vite 8, React Router 7; testy Vitest + Testing Library
 - `/` przedstawia SOMA oraz sekcje dla ucznia, rodzica i mentora; pierwszą grupą są ósmoklasiści, maturzyści są planowani później
-- `/kursy` pokazuje pusty stan bez ofert; `/logowanie` działa z API allauth Headless (email + hasło + kod, Google tylko dla zweryfikowanych kont)
-- Zaproszenia uczniów przez mentora są planowane, ale niezaimplementowane
+- `/kursy` pokazuje listę kursów dla zalogowanych użytkowników; `/logowanie` działa z API allauth Headless (email + hasło + kod, Google tylko dla zweryfikowanych kont)
+- Dołączanie do kursów prywatnych przez link z tokenem jest zaimplementowane; zaproszenia imienne przez mentora są planowane, ale niezaimplementowane
 - Końcowe QA prototypu: `npm test` 10/10, `npm run build` poprawny, `get_errors` bez błędów; QA nie wykazał blockerów
 - Ręczna inspekcja Chrome/CDP: trasy otwierają się bezpośrednio; na `/` `document.scrollWidth` odpowiadał szerokości viewportu 320×844 i 390×844, a na `/kursy` i `/logowanie` wynosił 390 px przy viewportcie 390×844
 - Zrzuty ekranu desktop i mobile obejrzano wizualnie; kontrasty znalezione podczas QA poprawiono
 - Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG
 - Instrukcje uruchomienia i testów: `../frontend/README.md`
+
+### Kursy, zadania i instancje (✅ zaimplementowane, aktualizacja 30.10.2026)
+- Backend: modele Course, CourseTask, Instance, InstanceTask, InstancePeriod; zatwierdzanie kursów w Django admin; limit jednej aktywnej instancji na ucznia; kopia zadań przy dołączeniu; zamykanie i wznawianie instancji; licznik aktywnych uczniów mentora; postęp w procentach.
+- Frontend: lista kursów, szczegóły, dołączanie (także przez link z tokenem), widok instancji ucznia, zarządzanie kursami mentora i formularz nowego kursu.
+- Zakres, endpointy i kody błędów: `BACKEND.md`; trasy: `BACKEND.md` i `../frontend/README.md`.
+- Nie zadeklarowano zaliczenia testów responsywności widoków kursów (AC-53); wymagają osobnej weryfikacji.
+- Zaproszenia imienne przez mentora pozostają planowane.
 
 ### Dokumentacja (✅)
 - Framework SOMA opisany i sformatowany
@@ -63,13 +70,16 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Diagram workflow agentów
 - Plan projektu i wizja
 
-### Docker & Deployment (⏳ do zrobienia)
-- Przygotowanie docker-compose z Postgresem
-- CI/CD pipeline
+### Docker & Deployment (lokalny Docker ✅, CI/CD ⏳, aktualizacja 30.10.2026)
+- ✅ Lokalny Docker Compose: frontend 5174, backend/admin 8001, PostgreSQL 18 bez portu hosta, Mailpit SMTP 1027 i UI 8027. Nowa baza, automatyczne migracje i administrator, trwały wolumen oraz hot reload.
+- Instrukcja startu, konfiguracji i testów: [README — Lokalny Docker](../README.md#lokalny-docker).
+- Niezależne QA: 4 usługi healthy; pełny przepływ rejestracji, potwierdzenia e-maila, logowania kodem i resetu hasła; trwałość po `down`/`up`; hot reload. Regresja: backend 207 OK, frontend 117 OK (6 kontraktów Docker pomijanych w kontenerze, 6/6 zaliczonych na hoście), build OK.
+- Wyłącznie lokalny development, bez Google i importu danych. Stare kontenery i wolumeny pozostawiono nietknięte. Znane ograniczenia aplikacji i brak pełnego audytu bezpieczeństwa opisano w [README](../README.md#zakres-i-ograniczenia).
+- ⏳ CI/CD i wdrożenie produkcyjne.
 
 ## Dokumenty referencyjne
 
 - `../soma/README.md` – opis frameworka SOMA,
 - `AGENTS.md` – role w zespole agentów,
 - `diagram.mmd` – workflow agentów,
-- `BACKEND.md` – dokumentacja backendowych API (do utworzenia).
+- `BACKEND.md` – dokumentacja backendowych API, modeli kursów i instancji oraz tras frontendu.

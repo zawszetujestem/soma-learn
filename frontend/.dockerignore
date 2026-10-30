@@ -1,0 +1,12 @@
+.env
+.env.*
+*.sqlite3
+*.sqlite3-*
+node_modules
+__pycache__
+*.py[cod]
+.git
+dist
+coverage
+.vite
+*.log

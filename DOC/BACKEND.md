@@ -109,12 +109,26 @@ Token przekazuje się jako `Authorization: Token <token>`. Frontend przechowuje 
 
 #### Zablokowane endpointy Headless
 
-`config/urls.py` zwraca `404` dla poniższych ścieżek pod `/_allauth/browser/v1/`. Zmiana i reset hasła, zmiana e-maila oraz telefon nie są dostępne przez Headless:
-- `auth/password/request`, `auth/password/reset`, `auth/reauthenticate`
+`config/urls.py` zwraca `404` dla poniższych ścieżek pod `/_allauth/browser/v1/`. Zmiana hasła dla zalogowanego, zmiana e-maila oraz telefon nie są dostępne przez Headless:
+- `auth/reauthenticate`
 - `account/password/change`, `account/email`, `account/phone`
 - `auth/phone/verify`, `auth/phone/verify/resend`
 
-Reset hasła idzie przez `POST /api/auth/password-reset/` i `POST /api/auth/password-reset-confirm/`. Aplikacja nie udostępnia endpointu zmiany hasła ani e-maila dla zalogowanego użytkownika.
+Aplikacja nie udostępnia endpointu zmiany hasła ani e-maila dla zalogowanego użytkownika.
+
+#### Reset hasła kodem (allauth Headless)
+
+Ekran `/logowanie/reset-hasla` działa na endpointach `/_allauth/browser/v1/auth/password/...`. Kod ma 6 cyfr, jest ważny `PASSWORD_RESET_BY_CODE_TIMEOUT = 600` s i ma `PASSWORD_RESET_BY_CODE_MAX_ATTEMPTS = 5` prób.
+
+1. `POST /_allauth/browser/v1/auth/password/request` z body `{"email": "..."}`. Odpowiedź jest taka sama dla istniejącego i nieistniejącego adresu (`401` z oczekującym flow `password_reset_by_code`). Kod wysyłany jest tylko dla istniejących kont, a dla nieistniejących adres dostaje informację o braku konta. Jeśli przeglądarka ma aktywną sesję (`meta.is_authenticated: true`), frontend kończy ją przez `DELETE /_allauth/browser/v1/auth/session`, czyści token DRF i ponawia żądanie.
+2. `GET /_allauth/browser/v1/auth/password/reset` z nagłówkiem `X-Password-Reset-Key: <kod>` sprawdza kod. Błędny kod zwraca `400` i zalicza próbę.
+3. `POST /_allauth/browser/v1/auth/password/reset` z body `{"key": "<kod>", "password": "..."}` ustawia nowe hasło (walidatory haseł Django). Po sukcesie użytkownik loguje się ponownie; sesja nie jest uwierzytelniana.
+
+Limity żądań: `reset_password` `20/h/ip,5/h/key`, `reset_password_from_key` `20/h/ip`.
+
+W trybie `DEBUG` e-maile trafiają na konsolę serwera (`EMAIL_BACKEND` domyślnie `console`).
+
+Legacy endpointy oparte o link (`POST /api/auth/password-reset/`, `POST /api/auth/password-reset-confirm/`) nadal istnieją i nie są używane przez ekran `/logowanie/reset-hasla`.
 
 #### `POST /api/auth/social-login/`
 
@@ -212,6 +226,133 @@ Authorization: Token abc123token...
 }
 ```
 
+## Kursy, zadania i instancje
+
+Zakres zrealizowany: modele, reguły, API i Django admin w `backend/learning/`.
+
+Dostęp do zarządzania kursami mają role `mentor` i `admin` (`IsCourseManager`). Pozostałe endpointy wymagają zalogowania.
+
+### Modele
+
+**Course** — kurs.
+- `owner` — właściciel (FK do użytkownika, `PROTECT`),
+- `title` (max 200), `description`,
+- `visibility` — `public` | `private`; nie można zmienić po utworzeniu,
+- `approval_status` — `pending` | `approved` | `rejected`,
+- `is_active` — domyślnie `true`,
+- `invite_token` — unikalny, generowany dla kursów prywatnych, `null` dla publicznych.
+
+**CourseTask** — zadanie-szablon kursu: `title` (max 255), `hours` (`DecimalField(6, 2)`, > 0), `position`.
+
+**Instance** — kurs ucznia: `course`, `student`, `mentor` (właściciel kursu; `null`, gdy dołącza właściciel do własnego kursu), `status` (`active` | `closed`), `closed_at`, `created_at`. Constraint `one_active_instance_per_student` wymusza jedną aktywną instancję na ucznia.
+
+**InstancePeriod** — okres aktywności: `started_at`, `ended_at` (`null` = trwa). Nowy okres powstaje przy dołączeniu i każdym wznowieniu; zamknięcie kończy otwarty okres.
+
+**InstanceTask** — kopia zadania w instancji: `title`, `hours`, `status` (`todo` | `in_progress` | `done`), `position`. Późniejsze zmiany zadań kursu nie wpływają na istniejące instancje.
+
+### Reguły
+
+**Zatwierdzanie kursów**
+- `pending → approved` i `pending → rejected` — administrator w Django admin (`/admin/`).
+- `approved → rejected` jest zablokowane (walidacja w admin i w `save()`); każda zmiana zatwierdzonego kursu publicznego wraca do `pending` (patrz Edycja).
+- `rejected → pending` — właściciel przez `POST .../resubmit/`.
+- Mentor tworzy kurs `public` jako `pending`, a `private` jako `approved` z tokenem.
+- Administrator tworzy wyłącznie kursy `public` (zatwierdzone od razu); `private` → 403. Dla konta z rolami mentor i admin obowiązuje reguła administratora.
+
+**Edycja**
+- Każda zmiana zatwierdzonego kursu publicznego wymaga ponownego zatwierdzenia i przenosi go do `pending`: zmiana `title` lub `description` (także w Django admin), dodanie, edycja lub usunięcie zadania (`/tasks/`). Instancje uczniów nie są zmieniane.
+- Zmiana `is_active` nie zmienia statusu zatwierdzenia.
+- Edycja kursu `rejected` nie zmienia statusu.
+
+**Tokeny linków**
+- Token: `secrets.token_urlsafe(32)`. Regeneracja unieważnia poprzedni token (nieznany token → 404). Dotyczy tylko kursów prywatnych (dla publicznych → 409). Istniejące instancje nie są zmieniane.
+
+**Dołączanie** (`join` i `join/{token}`)
+- Dołączyć może użytkownik z rolą `student` lub właściciel kursu. Inny użytkownik bez roli `student` → 403, o ile kurs jest widoczny; w przeciwnym razie 404.
+- Kurs musi być aktywny (`course_inactive`, także gdy uczeń ma już instancję tego kursu), `approved` (dla innych użytkowników `pending`/`rejected` → 404; właściciel dostaje 409 `course_not_approved`) i, dla kursu prywatnego, dostępny przez token.
+- Ponowne dołączenie do aktywnego kursu z aktywną instancją zwraca 200 z tą samą instancją.
+- Limit jednej aktywnej instancji na ucznia: `slot_taken`. Zamknięta instancja nie blokuje nowej.
+- Przy dołączeniu zadania kursu są kopiowane do instancji ze statusem `todo`.
+
+**Zmiana statusu zadania** (`PATCH .../tasks/{id}/`)
+- Mentor instancji — tak. Uczeń instancji bez mentora — tak. Uczeń instancji z mentorem — 403.
+- Zamknięta instancja → 409 `instance_closed`.
+- Pole `progress` jest tylko do odczytu.
+
+**Postęp**
+- Procent godzin zadań `done` względem sumy godzin wszystkich zadań; `Decimal`, zaokrąglenie do 1 miejsca (ROUND_HALF_UP), zwracany jako liczba. Brak zadań → `0.0`.
+
+**Zamykanie i wznowienie**
+- Zamknięcie: mentor instancji lub uczeń instancji bez mentora. Ustawia `status=closed` i `closed_at`, kończy otwarte okresy. Zamknięta → 409 `already_closed`. Działa także dla nieaktywnego kursu.
+- Wznowienie: te same reguły dostępu co przy zamknięciu. Zeruje `closed_at` i dodaje nowy `InstancePeriod`. Wymaga: instancji zamkniętej (`already_active`), zatwierdzonego kursu (`course_not_approved`), aktywnego kursu (`course_inactive`) oraz braku innej aktywnej instancji ucznia (`slot_taken`).
+- System nie zapisuje, kto zamknął instancję; wznowienie podlega tym samym regułom dostępu.
+
+**Licznik uczniów**
+- `GET /api/courses/mine/{id}/students-count/` zlicza instancje `active` z `mentor` = bieżący użytkownik. Zamknięte i instancje bez mentora się nie liczą.
+
+### Endpointy
+
+Prefiks: `/api/`. Uwierzytelnianie: `Authorization: Token <token>` lub sesja.
+
+| Metoda | Ścieżka | Kto | Opis |
+|---|---|---|---|
+| GET | `/courses/` | zalogowany | Lista kursów publicznych, zatwierdzonych i aktywnych |
+| POST | `/courses/` | mentor, admin | Tworzy kurs (`title`, `description`, `visibility`) |
+| GET | `/courses/mine/` | mentor, admin | Własne kursy, wszystkie statusy |
+| GET | `/courses/mine/{id}/` | właściciel | Szczegóły; dla prywatnego zawiera `invite_token` |
+| GET | `/courses/mine/{id}/students-count/` | właściciel | Liczba aktywnych uczniów z mentorem |
+| GET | `/courses/{id}/` | zalogowany (widoczny) | Szczegóły kursu |
+| PATCH | `/courses/{id}/` | właściciel | `title`, `description`, `is_active` |
+| POST | `/courses/{id}/resubmit/` | właściciel | `rejected → pending` |
+| POST | `/courses/{id}/regenerate-token/` | właściciel | Nowy `invite_token` (tylko prywatne) |
+| POST | `/courses/{id}/join/` | student, właściciel | Dołączenie (tworzy lub zwraca instancję) |
+| POST | `/courses/join/{token}/` | student, właściciel | Dołączenie przez link z tokenem |
+| POST | `/courses/{id}/tasks/` | właściciel | Dodaje zadanie kursu (`title`, `hours`, `position`) |
+| PATCH | `/courses/{id}/tasks/{task_id}/` | właściciel | Edycja zadania kursu |
+| DELETE | `/courses/{id}/tasks/{task_id}/` | właściciel | Usunięcie zadania kursu |
+| GET | `/instances/` | zalogowany | Instancje, w których jest uczniem lub mentorem |
+| GET | `/instances/{id}/` | uczeń lub mentor instancji | Szczegóły z `progress` i `tasks` |
+| PATCH | `/instances/{id}/tasks/{task_id}/` | zgodnie z regułami | Body: `{"status": "todo" \| "in_progress" \| "done"}` |
+| POST | `/instances/{id}/close/` | zgodnie z regułami | Zamknięcie |
+| POST | `/instances/{id}/resume/` | zgodnie z regułami | Wznowienie |
+
+Metody spoza tabeli (np. `PATCH /instances/{id}/`) zwracają 405.
+
+### Błędy
+
+- **Format domenowy:** `{"code": "...", "detail": "..."}`.
+- **Format DRF:** błędy walidacji (400) i część błędów uprawnień/404 mają `{"detail": "..."}` lub `{"pole": ["..."]}` bez pola `code`.
+- **400** — walidacja (pusty lub za długi `title`, `visibility` spoza listy, `hours` ≤ 0 lub z więcej niż 2 miejscami, `status` spoza listy, próba zmiany `visibility`).
+- **401** — brak lub nieprawidłowy token.
+- **403** — zasób widoczny, ale akcja zabroniona (`code: forbidden`) lub brak roli mentor/admin (sam `detail`).
+- **404** — zasób niewidoczny lub nieistniejący, w tym nieznany lub unieważniony token (`code: not_found` lub `detail`).
+- **409** — reguła biznesowa:
+
+| Kod | Znaczenie |
+|---|---|
+| `course_not_approved` | Kurs nie został zatwierdzony |
+| `course_not_rejected` | Ponowne zgłoszenie tylko dla kursu odrzuconego |
+| `course_not_private` | Regeneracja tokenu tylko dla kursu prywatnego |
+| `course_inactive` | Kurs jest nieaktywny |
+| `slot_taken` | Uczeń ma już aktywną instancję innego kursu |
+| `already_closed` | Instancja jest już zamknięta |
+| `already_active` | Instancja jest już aktywna |
+| `instance_closed` | Zamknięta instancja jest tylko do odczytu |
+
+### Trasy frontendu
+
+Wszystkie trasy poniżej wymagają zalogowania (`RequireAuth`); `/kursy/moje*` dodatkowo roli mentor/admin (`RequireManager`).
+
+| Trasa | Widok |
+|---|---|
+| `/kursy` | Lista kursów |
+| `/kursy/{id}` | Szczegóły kursu i przycisk dołączenia |
+| `/kursy/dolacz/{token}` | Dołączenie przez link (przekierowuje do instancji) |
+| `/kursy/instancje/{id}` | Instancja: postęp, zadania, zamknięcie/wznowienie |
+| `/kursy/moje` | Kursy mentora |
+| `/kursy/moje/nowy` | Formularz nowego kursu |
+| `/kursy/moje/{id}` | Zarządzanie kursem: uczniowie, link, dezaktywacja, licznik |
+
 ## Konfiguracja
 
 ### .env zmienne
@@ -234,7 +375,7 @@ SUPERUSER_LAST_NAME=Soma
 
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=localhost
-EMAIL_PORT=1026
+EMAIL_PORT=1027
 EMAIL_USE_TLS=False
 ```
 
@@ -242,7 +383,7 @@ EMAIL_USE_TLS=False
 
 Kody logowania i e-maile potwierdzające wysyłane są przez SMTP.
 
-- Lokalnie: Mailpit z `docker-compose.yml` w katalogu głównym; SMTP na `localhost:1026` (port 1025 kontenera), UI na `http://localhost:8026`.
+- Lokalnie: Mailpit z `docker-compose.yml` w katalogu głównym (projekt `soma-learn-local-dev`); SMTP na `localhost:1027` dla backendu na hoście, `mailpit:1025` dla backendu w Dockerze, UI na `http://localhost:8027`. Starszy kontener na 1026/8026 pozostaje niezależny.
 - Bez `EMAIL_BACKEND` przy `DEBUG=True` Django wypisuje wiadomości w konsoli.
 
 ### Baza danych
@@ -254,6 +395,16 @@ Kody logowania i e-maile potwierdzające wysyłane są przez SMTP.
 - **PostgreSQL**: można podać `DATABASE_URL` albo zestaw `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` i `POSTGRES_PORT`. `DATABASE_URL` ma pierwszeństwo; znaki specjalne w loginie i haśle muszą być zakodowane w URL.
 
 ## Uruchamianie
+
+### Lokalny Docker
+
+Z katalogu głównego: `docker compose up --build --wait`. Frontend działa na http://localhost:5174, backend/admin na http://localhost:8001/admin/, poczta na http://localhost:8027. Nowy PostgreSQL 18 nie ma portu na hoście; migracje tworzą cache i administratora przez istniejący `post_migrate`. Dane SQLite i starsze wolumeny nie są importowane ani usuwane.
+
+Backend używa `DEBUG=true` i `runserver`; kod jest podmontowany, więc zmiany uruchamiają przeładowanie. Compose jawnie ustawia PostgreSQL (`USE_SQLITE=false`, pusty `DATABASE_URL`, host `db`), SMTP i adres frontendu, niezależnie od dotychczasowych ustawień lokalnych.
+
+Pełna instrukcja, dane lokalnego administratora, opcjonalne `DOCKER_*`, testy i ograniczenia: [README projektu](../README.md#lokalny-docker). `docker compose down` zachowuje bazę; `down -v` usuwa ją nieodwracalnie. Google nie jest skonfigurowane. To nie jest konfiguracja produkcyjna.
+
+### Bez kontenerów aplikacji
 
 ```bash
 cd backend
@@ -280,7 +431,6 @@ docker compose up -d mailpit
 
 ## Następne kroki
 
-- Modele kursów i instancji kursu
-- Endpointy do zarządzania kursami
+- Zaproszenia imienne uczniów przez mentora (planowane; obecnie działa dołączenie przez link z tokenem)
 - SOMA Cycle modele i API
 - Testy dla endpointów auth
