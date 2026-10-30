@@ -1,3 +1,5 @@
+import json
+
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -6,6 +8,7 @@ from django.http import HttpResponseRedirect
 from urllib.parse import urlencode
 from allauth.account.internal.flows.login import get_authentication_records
 from allauth.account.models import EmailAddress
+from allauth.headless.account.views import ConfirmLoginCodeView, SessionView
 from allauth.core import ratelimit
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, inline_serializer
@@ -18,6 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from . import trusted_browser
 from .models import User
 from .serializers import (
     EmailVerificationSerializer,
@@ -54,6 +58,36 @@ class LoginView(APIView):
     @extend_schema(request=None, responses={410: OpenApiTypes.OBJECT})
     def post(self, request, *args, **kwargs):
         return Response({'detail': 'Use the allauth browser login flow.'}, status=status.HTTP_410_GONE)
+
+
+def _is_authenticated_success(request, response):
+    if response.status_code != 200 or not request.user.is_authenticated:
+        return False
+    try:
+        body = json.loads(response.content)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(body, dict) and body.get('meta', {}).get('is_authenticated') is True
+
+
+class RememberBrowserConfirmLoginCodeView(ConfirmLoginCodeView):
+    """allauth code confirm + optional strict boolean `remember_browser` (24h trust)."""
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        data = getattr(self, 'data', None) or {}
+        if data.get('remember_browser') is True and _is_authenticated_success(request, response):
+            trusted_browser.issue(request, response, request.user)
+        return response
+
+
+class TrustedBrowserSessionView(SessionView):
+    """allauth session; logout also revokes this profile's trusted-browser token."""
+
+    def delete(self, request, *args, **kwargs):
+        response = super().delete(request, *args, **kwargs)
+        trusted_browser.revoke(request, response)
+        return response
 
 
 class TokenExchangeView(APIView):

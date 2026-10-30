@@ -441,7 +441,7 @@ describe('SOMA Learn public pages', () => {
     expectSecurePost(fetchMock, 0)
     expectSecurePost(fetchMock, 1)
     expectSecurePost(fetchMock, 2)
-    expect(expectJsonBody(fetchMock, 1)).toEqual({ code: 'ABC123' })
+    expect(expectJsonBody(fetchMock, 1)).toEqual({ code: 'ABC123', remember_browser: false })
     expect(localStorage.length).toBe(0)
     expect(storedValues(sessionStorage)).not.toContain('example-password')
   })

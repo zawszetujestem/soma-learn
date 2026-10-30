@@ -7,6 +7,7 @@ from allauth.headless.base.response import RateLimitResponse
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from . import trusted_browser
 from .models import User
 
 
@@ -19,6 +20,12 @@ class SomaAccountAdapter(DefaultAccountAdapter):
         if user and user.is_active and user.is_email_confirmed:
             return user
         return None
+
+    def is_login_by_code_required(self, login):
+        required = super().is_login_by_code_required(login)
+        if required and trusted_browser.is_trusted(self.request, login.user):
+            return False
+        return required
 
     def get_email_confirmation_url(self, request, emailconfirmation):
         return settings.HEADLESS_FRONTEND_URLS['account_confirm_email'].format(key=emailconfirmation.key)

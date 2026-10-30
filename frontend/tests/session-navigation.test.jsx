@@ -99,7 +99,7 @@ describe('session-aware navigation', () => {
   it('logs out: ends the session, clears the token and returns to login link', async () => {
     sessionStorage.setItem('token', 'student-token')
     const fetchMock = vi.fn(async (url, options) => {
-      if (url === SESSION_URL && options?.method === 'DELETE') return jsonResponse({}, 401)
+      if (url === SESSION_URL && options?.method === 'DELETE') return jsonResponse({ meta: { is_authenticated: false } }, 401)
       return apiFetch(url)
     })
     vi.stubGlobal('fetch', fetchMock)

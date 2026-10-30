@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { GoogleCallbackPage, LoginPage, PasswordResetPage, RegistrationPage, VerificationPage } from './AuthPages.jsx'
-import { logout } from './authApi.js'
+import { logout, logoutUnconfirmedError } from './authApi.js'
 import CoursesPage from './courses/CoursesPage.jsx'
 import CourseDetailPage from './courses/CourseDetailPage.jsx'
 import CourseEditorPage from './courses/CourseEditorPage.jsx'
@@ -52,13 +53,24 @@ function SiteHeader() {
   useLocation()
   const navigate = useNavigate()
   const loggedIn = Boolean(getToken())
+  const [logoutState, setLogoutState] = useState({ busy: false, failed: false, confirmed: false })
 
   async function handleLogout() {
-    await logout().catch(() => {})
-    navigate('/')
+    if (logoutState.busy) return
+    // The retry button is shown only after the local token has already been cleared.
+    const retry = !loggedIn
+    setLogoutState({ busy: true, failed: retry, confirmed: false })
+    try {
+      await logout()
+      setLogoutState({ busy: false, failed: false, confirmed: retry })
+    } catch {
+      setLogoutState({ busy: false, failed: true, confirmed: false })
+    }
+    if (!retry) navigate('/')
   }
 
   return (
+    <>
     <header className="site-header">
       <Link className="wordmark" to="/" aria-label="SOMA Learn, strona główna">
         <svg className="wordmark-symbol" viewBox="0 0 40 40" aria-hidden="true">
@@ -74,8 +86,8 @@ function SiteHeader() {
           Kursy
         </NavLink>
         {loggedIn ? (
-          <button className="nav-login nav-logout" type="button" onClick={handleLogout}>
-            Wyloguj
+          <button className="nav-login nav-logout" type="button" onClick={handleLogout} disabled={logoutState.busy}>
+            {logoutState.busy ? 'Wylogowywanie…' : 'Wyloguj'}
           </button>
         ) : (
           <NavLink className={({ isActive }) => `nav-login${isActive ? ' is-active' : ''}`} to="/logowanie">
@@ -84,6 +96,18 @@ function SiteHeader() {
         )}
       </nav>
     </header>
+    {!loggedIn && logoutState.failed && (
+      <div className="logout-notice page-width">
+        <p className="auth-error" role="alert">{logoutUnconfirmedError}</p>
+        <button className="button button-secondary" type="button" onClick={handleLogout} disabled={logoutState.busy}>
+          {logoutState.busy ? 'Wylogowywanie…' : 'Ponów wylogowanie'}
+        </button>
+      </div>
+    )}
+    {!loggedIn && logoutState.confirmed && (
+      <p className="auth-status logout-notice page-width" role="status">Wylogowanie zostało potwierdzone.</p>
+    )}
+    </>
   )
 }
 

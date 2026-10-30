@@ -64,6 +64,13 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Nie zadeklarowano zaliczenia testów responsywności widoków kursów (AC-53); wymagają osobnej weryfikacji.
 - Zaproszenia imienne przez mentora pozostają planowane.
 
+### Zaufana przeglądarka (✅ zaimplementowane, QA PASS 30.10.2026)
+- Opcjonalne pomijanie OTP przez 24 godziny od poprawnego kodu; zgoda na etapie kodu, domyślnie wyłączona. Email i hasło nadal wymagane przy nowym logowaniu; użycie nie odnawia TTL ani nie przedłuża sesji.
+- Backend: `TrustedBrowser` i migracja `0004_trusted_browser`; wylogowanie cofa zaufanie bieżącego profilu, zmiana hasha hasła unieważnia wszystkie profile. Wszystkie role, także staff/admin/superuser, mogą korzystać z funkcji.
+- Frontend obsługuje logowanie bez etapu kodu przy ważnym zaufaniu oraz ostrzeżenie i retry przy niepotwierdzonym wylogowaniu. Google i formularz `/admin/` bez zmian; brak panelu urządzeń.
+- Niezależne QA: backend 236 OK, 1 pominięty (celowane 29 OK); frontend ponowiony pełny przebieg 143 zaliczone, 1 pominięty (celowane 21 OK), build OK. Pierwszy przebieg frontendu ujawnił istniejący flaky P3 testu kursów, bez naprawy w tym zakresie; brak blockerów.
+- To pomijanie OTP, nie pełne zabezpieczenie konta: skopiowane cookie nadal wymaga hasła, a token DRF nadal pozostaje ważny po logout/resecie. Nie wykonano pełnego rzeczywistego E2E, PostgreSQL ani prawdziwego Google OAuth dla tej funkcji. Szczegóły kontraktu, wyników i ograniczeń: [BACKEND.md](BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia); obsługa użytkownika: [frontend/README.md](../frontend/README.md#zaufana-przeglądarka-i-wylogowanie).
+
 ### Dokumentacja (✅)
 - Framework SOMA opisany i sformatowany
 - Struktura agentów i ich role

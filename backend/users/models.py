@@ -100,3 +100,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_admin(self):
         return self.has_role(Role.ADMIN)
+
+
+class TrustedBrowser(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='trusted_browsers')
+    token_hash = models.CharField(max_length=64, unique=True)
+    password_fingerprint = models.CharField(max_length=64)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(db_index=True)
+
+    def __str__(self):
+        return f'{self.user} until {self.expires_at:%Y-%m-%d %H:%M}'

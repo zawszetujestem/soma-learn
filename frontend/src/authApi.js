@@ -80,9 +80,15 @@ export async function exchangeToken() {
   sessionStorage.setItem('token', payload.token)
 }
 
+export const logoutUnconfirmedError = 'Usunęliśmy dane logowania z tej karty, ale nie udało się potwierdzić wylogowania na serwerze. Zaufanie tej przeglądarki mogło nie zostać cofnięte. Ponów wylogowanie.'
+
 export async function logout() {
   try {
-    await deleteJson('/_allauth/browser/v1/auth/session')
+    const { response, payload } = await deleteJson('/_allauth/browser/v1/auth/session')
+    // Allauth answers a successful logout with 401 and meta.is_authenticated === false.
+    if (![200, 401].includes(response.status) || payload.meta?.is_authenticated !== false) {
+      throw new Error(logoutUnconfirmedError)
+    }
   } finally {
     sessionStorage.removeItem('token')
   }

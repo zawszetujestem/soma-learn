@@ -21,6 +21,32 @@ function AuthLayout({ title, children }) {
   )
 }
 
+function PasswordInput({ id, autoComplete, disabled }) {
+  const [visible, setVisible] = useState(false)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    const form = inputRef.current?.form
+    if (!form) return
+    // Mask synchronously before submit so password managers detect and save the credential.
+    const mask = () => {
+      inputRef.current.type = 'password'
+      setVisible(false)
+    }
+    form.addEventListener('submit', mask)
+    return () => form.removeEventListener('submit', mask)
+  }, [])
+
+  return (
+    <div className="password-field">
+      <input ref={inputRef} id={id} name="password" type={visible ? 'text' : 'password'} autoComplete={autoComplete} required disabled={disabled} />
+      <button className="password-toggle" type="button" aria-controls={id} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>
+        {visible ? 'Ukryj' : 'Pokaż'}
+      </button>
+    </div>
+  )
+}
+
 function useCsrf() {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
@@ -73,9 +99,9 @@ export function RegistrationPage() {
           <label htmlFor="register-last-name">Nazwisko</label>
           <input id="register-last-name" name="last_name" autoComplete="family-name" required disabled={busy} />
           <label htmlFor="register-email">Email</label>
-          <input id="register-email" name="email" type="email" autoComplete="email" required disabled={busy} />
+          <input id="register-email" name="email" type="email" autoComplete="username" required disabled={busy} />
           <label htmlFor="register-password">Hasło</label>
-          <input id="register-password" name="password" type="password" autoComplete="new-password" required disabled={busy} />
+          <PasswordInput id="register-password" autoComplete="new-password" disabled={busy} />
           {role === 'mentor' && <>
             <label htmlFor="register-specialization">Specjalizacja</label>
             <input id="register-specialization" name="specialization" required disabled={busy} />
@@ -254,8 +280,9 @@ export function PasswordResetPage() {
           <button className="button button-secondary" type="button" onClick={resend} disabled={busy}>Wyślij kod ponownie</button>
         </>}
         {stage === 'password' && <>
+          <input className="visually-hidden" name="username" type="email" autoComplete="username" value={email} readOnly tabIndex={-1} aria-hidden="true" />
           <label htmlFor="reset-password">Nowe hasło</label>
-          <input id="reset-password" name="password" type="password" autoComplete="new-password" required disabled={busy} />
+          <PasswordInput id="reset-password" autoComplete="new-password" disabled={busy} />
           <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Zapisywanie…' : 'Zmień hasło'}</button>
         </>}
       </form>}
@@ -275,6 +302,7 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [code, setCode] = useState('')
+  const [rememberBrowser, setRememberBrowser] = useState(false)
   const [receivedAt, setReceivedAt] = useState(0)
   const [resendAt, setResendAt] = useState(0)
   const [resendLocked, setResendLocked] = useState(false)
@@ -296,6 +324,7 @@ export function LoginPage() {
     setResendAt(time + 60000)
     setNow(time)
     setCode('')
+    setRememberBrowser(false)
     setNotice('Kod został wysłany na Twój email.')
     setStage('code')
   }
@@ -313,9 +342,14 @@ export function LoginPage() {
     const form = new FormData(event.currentTarget)
     setBusy(true)
     setError('')
+    let finishing = stage === 'exchange'
+    const finish = () => {
+      finishing = true
+      return finishLogin()
+    }
     try {
       if (stage === 'exchange') {
-        await finishLogin()
+        await finish()
       } else if (stage === 'password') {
         const { response, payload } = await postJson('/_allauth/browser/v1/auth/login', {
           email: form.get('email'), password: form.get('password'),
@@ -323,24 +357,30 @@ export function LoginPage() {
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
+        } else if (response.status === 200 && payload.meta?.is_authenticated === true && !payload.errors?.length) {
+          // Trusted browser: the backend skipped OTP after a correct password.
+          await finish()
         } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
-          await finishLogin()
+          await finish()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
         } else {
           setError(responseError(response, payload))
         }
       } else {
-        const { response, payload } = await postJson('/_allauth/browser/v1/auth/code/confirm', { code: code.trim() })
+        const { response, payload } = await postJson('/_allauth/browser/v1/auth/code/confirm', {
+          code: code.trim(), remember_browser: rememberBrowser,
+        })
         if (response.ok && payload.meta?.is_authenticated === true) {
           setCode('')
-          await finishLogin()
+          setRememberBrowser(false)
+          await finish()
         } else {
           setError(responseError(response, payload))
         }
       }
     } catch (failure) {
-      setError(stage === 'code' || stage === 'exchange'
+      setError(stage === 'code' || finishing
         ? failure.message === 'Failed to fetch' ? connectionError : 'Nie udało się dokończyć logowania. Spróbuj ponownie.'
         : connectionError)
     } finally {
@@ -381,14 +421,21 @@ export function LoginPage() {
       {stage !== 'complete' && <form key={stage} onSubmit={submit} aria-busy={busy}>
         {stage === 'password' ? <>
           <label htmlFor="login-email">Email</label>
-          <input id="login-email" name="email" type="email" autoComplete="email" required disabled={busy} />
+          <input id="login-email" name="email" type="email" autoComplete="username" required disabled={busy} />
           <label htmlFor="login-password">Hasło</label>
-          <input id="login-password" name="password" type="password" autoComplete="current-password" required disabled={busy} />
+          <PasswordInput id="login-password" autoComplete="current-password" disabled={busy} />
           <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Logowanie…' : 'Zaloguj się'}</button>
         </> : stage === 'code' ? <>
           <label htmlFor="login-code">Kod weryfikacyjny</label>
           <input id="login-code" name="code" autoComplete="one-time-code" autoFocus required value={code} onChange={(event) => setCode(event.target.value)} disabled={busy || !remaining} aria-describedby="code-expiration" />
           <p className="login-notice" id="code-expiration">{remaining ? `Kod ważny jeszcze około ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Kod wygasł. Rozpocznij logowanie ponownie.'}</p>
+          <div className="trust-option">
+            <input id="remember-browser" name="remember_browser" type="checkbox" checked={rememberBrowser} onChange={(event) => setRememberBrowser(event.target.checked)} disabled={busy || !remaining} aria-describedby="remember-browser-help" />
+            <label htmlFor="remember-browser">Zapamiętaj mnie w tej przeglądarce</label>
+          </div>
+          <p className="login-notice trust-help" id="remember-browser-help">
+            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki. Wylogowanie cofa to zaufanie.
+          </p>
           <button className="button button-primary" type="submit" disabled={busy || !remaining}>{busy ? 'Weryfikowanie…' : 'Potwierdź kod'}</button>
           <button className="button button-secondary" type="button" onClick={resend} disabled={busy || resendLocked || !remaining || cooldown > 0}>
             {cooldown ? `Wyślij ponownie za ${cooldown} s` : 'Wyślij kod ponownie'}
@@ -400,6 +447,7 @@ export function LoginPage() {
       {stage === 'code' && <button className="auth-reset" type="button" disabled={busy} onClick={() => {
         setStage('password')
         setCode('')
+        setRememberBrowser(false)
         setError('')
         setNotice('')
       }}>Wróć do logowania</button>}

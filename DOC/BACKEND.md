@@ -31,6 +31,19 @@ Dostępne role:
 - `owner` — właściciel kursu
 - `admin` — administrator systemu
 
+### TrustedBrowser
+
+Zaufanie profilu przeglądarki do pomijania kodu logowania przez 24 godziny; nie jest sesją ani tokenem API.
+
+**Pola:**
+- `user` — ForeignKey do `User`, `CASCADE`, relacja `trusted_browsers`
+- `token_hash` — unikalny SHA-256 losowego tokenu (64 znaki); surowy token jest tylko w cookie
+- `password_fingerprint` — HMAC-SHA-256 aktualnego hasha hasła, oparty na `SECRET_KEY` (64 znaki)
+- `created_at` — czas utworzenia
+- `expires_at` — czas wygaśnięcia, z indeksem
+
+Model tworzy migracja `backend/users/migrations/0004_trusted_browser.py`, zależna od `0003_create_rate_limit_cache`. Przed użyciem funkcji należy wykonać standardowe `python manage.py migrate` (lokalny Compose wykonuje migracje automatycznie). Nie dodano automatycznego czyszczenia wygasłych rekordów ani panelu urządzeń.
+
 ## API Endpointy
 
 ### Autentykacja
@@ -80,10 +93,10 @@ Endpoint wyłączony: zwraca `410 Gone` i nie wydaje tokenu.
 
 #### Logowanie (allauth Headless)
 
-Logowanie ma dwa etapy: email + hasło, a następnie 6-cyfrowy kod wysłany na email. Endpointy `/_allauth/browser/v1/` obsługuje allauth (klient `browser`).
+Standardowe logowanie ma dwa etapy: email + hasło, a następnie 6-cyfrowy kod wysłany na email. Ważne zaufanie przeglądarki pozwala pominąć wyłącznie kod. Endpointy `/_allauth/browser/v1/` obsługuje allauth (klient `browser`) z rozszerzeniami potwierdzenia kodu i wylogowania.
 
-1. `POST /_allauth/browser/v1/auth/login` z body `{"email": "...", "password": "..."}`. Poprawne dane zwracają `401` z oczekującym flow `login_by_code` i wysyłają kod. Konto z niepotwierdzonym emailem ma oczekujący flow `verify_email`.
-2. `POST /_allauth/browser/v1/auth/code/confirm` z body `{"code": "123456"}`. Po sukcesie `meta.is_authenticated` ma wartość `true`.
+1. `POST /_allauth/browser/v1/auth/login` z body `{"email": "...", "password": "..."}`. Bez ważnego zaufania poprawne dane zwracają `401` z oczekującym flow `login_by_code` i wysyłają kod. Z ważnym cookie zaufania dla tego użytkownika odpowiedź może od razu mieć `200`, `meta.is_authenticated: true`, bez wysyłania e-maila OTP. Email i hasło są nadal wymagane przy każdym nowym logowaniu. Konto z niepotwierdzonym emailem ma oczekujący flow `verify_email`.
+2. `POST /_allauth/browser/v1/auth/code/confirm` z body `{"code": "123456"}` albo `{"code": "123456", "remember_browser": true}`. Po sukcesie `meta.is_authenticated` ma wartość `true`. Opcjonalne `remember_browser` włącza zaufanie tylko dla ścisłej wartości JSON `true`; brak pola, `false` i wartości nieboolowskie (np. `"true"` lub `1`) nie są zgodą. Cookie i rekord powstają wyłącznie po poprawnym OTP, odpowiedzi `200` i pełnym uwierzytelnieniu. Błędny/wygasły kod, wyczerpane próby, brak oczekującego logowania lub brak CSRF nie wydają zaufania. Pole jest obsługiwane tylko na tym endpointcie, nie przy podaniu hasła, resecie czy wymianie tokenu.
 3. `POST /api/auth/login/resend/` wysyła kod ponownie:
    - kod jest ważny `ACCOUNT_LOGIN_BY_CODE_TIMEOUT = 600` s od pierwotnego wysłania; resend nie resetuje tego czasu,
    - cooldown między wysłaniami wynosi 60 s; w jego trakcie zwracane jest `429`,
@@ -107,6 +120,25 @@ Logowanie ma dwa etapy: email + hasło, a następnie 6-cyfrowy kod wysłany na e
 
 Token przekazuje się jako `Authorization: Token <token>`. Frontend przechowuje go w `sessionStorage`.
 
+#### Zaufana przeglądarka — okres ważności i ograniczenia
+
+- Cookie `soma_trusted_browser`: `HttpOnly`, host-only (bez `Domain`), `Path=/`, `SameSite=Lax`, `Secure=settings.SESSION_COOKIE_SECURE`, `Max-Age=86400`. W aktualnej konfiguracji `SESSION_COOKIE_SECURE = not DEBUG`; lokalny HTTP nie zapewnia ochrony transportu.
+- TTL wynosi dokładnie 24 godziny od poprawnego potwierdzenia kodu. Warunek ważności to `expires_at > now`; przy `expires_at <= now` ponownie wymagany jest OTP. Użycie zaufania nie odnawia cookie ani terminu w bazie.
+- Zaufanie jest przypisane do użytkownika i tokenu w danym profilu. Profil przechowuje jeden bieżący token: ponowny opt-in wydaje token B i usuwa rekord wskazany przez dotychczasowe cookie A, więc replay A nie działa. Zaufania innych profili pozostają niezależne. Nie jest to globalny limit jednego rekordu na użytkownika.
+- Konto musi być aktywne i mieć potwierdzony email. Funkcja jest dostępna dla wszystkich ról, także admin, staff i superuser, bez dodatkowych ograniczeń dla kont uprzywilejowanych.
+- Reset hasła Headless i legacy oraz każda inna zmiana zapisanego hasha hasła unieważniają zaufania wszystkich profili przez niezgodność fingerprintu. Rekordy nie są wtedy od razu fizycznie kasowane. Zmiana `SECRET_KEY` również unieważnia zaufania.
+- Cookie jest poświadczeniem typu bearer, nie dowodem posiadania konkretnego urządzenia: skopiowane przed unieważnieniem może służyć do pominięcia OTP w innym profilu, ale nadal wymaga poprawnego hasła. Nie należy włączać opcji na współdzielonym urządzeniu/profilu.
+- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po utracie/wygaśnięciu sesji, o ile nie wykonano wylogowania i nadal trwa TTL. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
+- Google i formularz `/admin/` pozostają bez zmian; formularz Django admin już wcześniej nie wymagał OTP. Nie jest to wdrożenie pełnego MFA ani pełny audyt bezpieczeństwa.
+
+#### Wylogowanie (allauth Headless)
+
+`DELETE /_allauth/browser/v1/auth/session` kończy sesję i usuwa cookie `soma_trusted_browser` oraz odpowiadający mu rekord serwerowy, także gdy sesja już wygasła. Replay cofniętego cookie nie pomija OTP; inne profile zachowują zaufanie. Żądania przeglądarkowe nadal wymagają CSRF.
+
+Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że serwer mógł nie zakończyć sesji/cofnąć zaufania, i udostępnia „Ponów wylogowanie”. Samo usunięcie tokenu z karty nie potwierdza unieważnienia po stronie serwera.
+
+**Istniejące ryzyko:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; cofnięcie zaufania przeglądarki nie rozwiązuje tego problemu.
+
 #### Zablokowane endpointy Headless
 
 `config/urls.py` zwraca `404` dla poniższych ścieżek pod `/_allauth/browser/v1/`. Zmiana hasła dla zalogowanego, zmiana e-maila oraz telefon nie są dostępne przez Headless:
@@ -129,6 +161,8 @@ Limity żądań: `reset_password` `20/h/ip,5/h/key`, `reset_password_from_key` `
 W trybie `DEBUG` e-maile trafiają na konsolę serwera (`EMAIL_BACKEND` domyślnie `console`).
 
 Legacy endpointy oparte o link (`POST /api/auth/password-reset/`, `POST /api/auth/password-reset-confirm/`) nadal istnieją i nie są używane przez ekran `/logowanie/reset-hasla`.
+
+Obie ścieżki resetu unieważniają zaufania wszystkich profili przez zmianę fingerprintu hasła (szczegóły powyżej); nie kasują od razu tych rekordów ani nie unieważniają istniejących tokenów DRF.
 
 #### `POST /api/auth/social-login/`
 
@@ -429,8 +463,18 @@ docker compose up -d mailpit
 - `GET /api/docs/` — Swagger UI
 - `GET /api/redoc/` — ReDoc UI
 
+## Weryfikacja zaufanej przeglądarki — 30.10.2026
+
+QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji względem bazowego HEAD `a4e233a` z roboczymi zmianami funkcji, nie ponowne uruchomienie testów w ramach aktualizacji dokumentacji.
+
+- TDD autorów: backend — faza RED 29 testów, 26 niepowodzeń → 29 zielonych; pełny zestaw 236 OK, 1 pominięty. Frontend — 16 niepowodzeń i 50 zaliczonych → 66 zielonych; pełny zestaw 143 zaliczone, 1 pominięty; build OK.
+- Niezależne QA backendu: pełny zestaw 236 OK, 1 pominięty; testy celowane 29 OK (`users.tests.test_trusted_browser_contract`); `check` — 0 problemów; `makemigrations` — brak zmian. Dodatkowe 6 testów uruchomionych przez stdin: wszystkie OK, bez utrwalania plików.
+- Niezależne QA frontendu: pierwszy pełny przebieg 142 zaliczone, 1 niepowodzenie, 1 pominięty; istniejący flaky P3 w `frontend/tests/courses/guard-and-courses.test.jsx:87` („finish nie funkcja”) dotyczy fragmentu identycznego z bazowym HEAD; nie uruchamiano osobnego przebiegu na bazowym HEAD. Izolowany zestaw 14 OK, ponowiony pełny przebieg 143 zaliczone, 1 pominięty; testy celowane 21 OK, build OK. Flaky nie naprawiano w tym zakresie.
+- Chrome, smoke z syntetycznym HTTP: checkbox przy 390×844 oraz ponawianie wylogowania przy szerokości 1280 px — bez poziomego overflow.
+- Nie wykonano pełnego rzeczywistego E2E frontend + backend, testów tej funkcji na PostgreSQL, prawdziwego Google OAuth, testu na fizycznym telefonie ani z czytnikiem ekranu/pełnego audytu WCAG. Wcześniejsze QA lokalnego Dockera nie zastępuje tych kontroli.
+
 ## Następne kroki
 
 - Zaproszenia imienne uczniów przez mentora (planowane; obecnie działa dołączenie przez link z tokenem)
 - SOMA Cycle modele i API
-- Testy dla endpointów auth
+- Osobny zakres bezpieczeństwa: unieważnianie tokenów DRF po wylogowaniu/resecie hasła; automatyczny cleanup wygasłych zaufanych przeglądarek pozostaje niezaimplementowany.

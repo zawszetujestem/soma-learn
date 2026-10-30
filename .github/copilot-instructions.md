@@ -8,6 +8,7 @@
 - Po implementacji wymagaj QA: testów względem kryteriów, regresji odpowiedniego zakresu i audytu ryzyk. Nie deklaruj zaliczenia testów ani audytu, jeśli nie zostały wykonane.
 - Po pozytywnym QA aktualizuj dokumentację zgodnie ze zmianą i zweryfikuj, że opis odpowiada implementacji.
 - Uruchamiaj testy i kontrole właściwe dla zmienionego obszaru. W podsumowaniu podaj zmiany, wyniki testów i audytu oraz nierozwiązane ryzyka.
+- Obsługa błędów HTTP: każda odpowiedź API o statusie 4xx lub 5xx musi zawierać niepuste pole `message` z jasnym, bezpiecznym dla użytkownika opisem błędu. Zachowuj status HTTP, istniejące kody maszynowe, szczegóły walidacji i kontrakty frameworków; adaptuj odpowiedź na granicy API zamiast po cichu pomijać lub nadpisywać błąd. Frontend ma wyświetlać otrzymany komunikat albo świadomie mapować kod błędu na lokalizowany komunikat, nie zastępując znanych błędów ogólnym tekstem. Testuj status, kształt odpowiedzi i komunikat dla dodanych lub zmienionych ścieżek błędów. W diagnostyce uwzględniaj status, endpoint/operację i bezpieczny kod błędu, ale nigdy nie zapisuj haseł, kodów OTP, tokenów, cookies ani innych sekretów.
 
 ## Agenci
 

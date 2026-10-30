@@ -805,6 +805,93 @@ button.nav-login:hover {
 	border-color: var(--forest);
 }
 
+.password-field {
+	position: relative;
+}
+
+.login-panel .password-field input {
+	padding-right: 76px;
+}
+
+.password-toggle {
+	position: absolute;
+	top: 50%;
+	right: 6px;
+	transform: translateY(-50%);
+	min-height: 34px;
+	padding: 0 10px;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	color: var(--forest);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+	text-decoration: underline;
+}
+
+.visually-hidden {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	min-height: 0 !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0 0 0 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+.trust-option {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin-top: 12px;
+}
+
+.login-panel .trust-option input[type='checkbox'] {
+	width: 18px;
+	height: 18px;
+	min-height: 18px;
+	flex: none;
+	margin: 3px 0 0;
+	padding: 0;
+	accent-color: var(--forest);
+}
+
+.login-panel .trust-option label {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.5;
+	cursor: pointer;
+}
+
+.login-panel .trust-help {
+	margin-top: 4px;
+}
+
+.logout-notice {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 18px;
+}
+
+.logout-notice .auth-error {
+	flex: 1 1 320px;
+}
+
+.logout-notice .button {
+	min-height: 44px;
+	cursor: pointer;
+}
+
 .button-disabled,
 .button-disabled:disabled {
 	width: 100%;
