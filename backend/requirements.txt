@@ -1,6 +1,6 @@
 asgiref==3.13.0
 Django==6.1.2
-django-allauth[headless]==65.21.0
+django-allauth[headless,socialaccount]==65.21.0
 django-cors-headers==4.9.0
 djangorestframework==3.18.3
 drf-spectacular==0.30.0
