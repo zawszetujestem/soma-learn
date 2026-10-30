@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { coursesApi } from './api.js'
 import { useCurrentUser } from './RequireAuth.jsx'
 import { ErrorMessage } from './StateViews.jsx'
@@ -8,7 +8,6 @@ const TITLE_MAX_LENGTH = 200
 
 export function validateCourseForm({ title }) {
   const trimmed = title.trim()
-  if (!trimmed) return 'Podaj tytuł kursu.'
   if (trimmed.length > TITLE_MAX_LENGTH) return `Tytuł może mieć maksymalnie ${TITLE_MAX_LENGTH} znaków.`
   return null
 }
@@ -20,7 +19,6 @@ export default function CourseEditorPage() {
   const [form, setForm] = useState({ title: '', description: '', visibility: isAdmin ? 'public' : 'private' })
   const [error, setError] = useState(null)
   const [submitError, setSubmitError] = useState(null)
-  const [pendingCourse, setPendingCourse] = useState(null)
   const [saving, setSaving] = useState(false)
 
   function update(field) {
@@ -41,11 +39,8 @@ export default function CourseEditorPage() {
         description: form.description.trim(),
         visibility: form.visibility,
       })
-      if (course.approval_status === 'pending') {
-        setPendingCourse(course)
-      } else {
-        navigate(`/kursy/moje/${course.id}`)
-      }
+      const versionId = typeof course.working_version === 'object' ? course.working_version?.id : course.working_version
+      navigate(`/kursy/moje/${course.id}/wersje/${versionId}/edytuj`)
     } catch (createError) {
       setSubmitError(createError.message)
     } finally {
@@ -60,12 +55,6 @@ export default function CourseEditorPage() {
         <h1>Utwórz kurs</h1>
       </header>
 
-      {pendingCourse && (
-        <div className="courses-status" role="status">
-          <p>Kurs został zapisany. Kurs publiczny oczekuje na zatwierdzenie przez administratora.</p>
-          <Link className="text-link" to={`/kursy/moje/${pendingCourse.id}`}>Przejdź do kursu</Link>
-        </div>
-      )}
       {submitError && <ErrorMessage>{submitError}</ErrorMessage>}
 
       <form className="course-form" onSubmit={submit} noValidate>

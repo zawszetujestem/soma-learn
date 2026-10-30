@@ -237,10 +237,10 @@ class CourseManagementServiceTests(TestCase):
         self.owner = make_user('mentor@example.com', 'mentor')
         self.course = make_course(self.owner)
 
-    def test_editing_approved_public_course_returns_it_to_pending(self):
+    def test_editing_archival_fields_does_not_reverify(self):
         services.update_course(self.course, {'title': 'Nowy tytul'})
         self.course.refresh_from_db()
-        self.assertEqual(self.course.approval_status, Course.ApprovalStatus.PENDING)
+        self.assertEqual(self.course.approval_status, Course.ApprovalStatus.APPROVED)
         self.assertEqual(self.course.title, 'Nowy tytul')
 
     def test_unchanged_content_keeps_approval(self):
@@ -257,13 +257,17 @@ class CourseManagementServiceTests(TestCase):
 
     def test_resubmit_only_from_rejected(self):
         with self.assertRaises(APIException) as ctx:
-            services.resubmit_course(self.course)
+            services.resubmit_course(self.course, self.owner, None)
         self.assertEqual(ctx.exception.detail['code'], 'course_not_rejected')
 
         rejected = make_course(self.owner, title='Odrzucony', status=Course.ApprovalStatus.REJECTED)
-        services.resubmit_course(rejected)
+        from learning.tests.helpers import complete_version
+        from learning.content_services import etag
+        version=complete_version(rejected.versions.get())
+        services.resubmit_course(rejected, self.owner, etag(version))
         rejected.refresh_from_db()
-        self.assertEqual(rejected.approval_status, Course.ApprovalStatus.PENDING)
+        self.assertEqual(rejected.approval_status, Course.ApprovalStatus.REJECTED)
+        self.assertEqual(rejected.versions.get().state, 'submitted')
 
     def test_regenerate_token_only_for_private(self):
         with self.assertRaises(APIException) as ctx:

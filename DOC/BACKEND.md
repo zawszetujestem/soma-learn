@@ -262,130 +262,104 @@ Authorization: Token abc123token...
 
 ## Kursy, zadania i instancje
 
-Zakres zrealizowany: modele, reguły, API i Django admin w `backend/learning/`.
+Nowy model treści kursów jest wersjonowany. Backend API, walidacja publikacji i uprawnienia są zaimplementowane w `backend/learning/`; materiały i załączniki kursu są przechowywane prywatnie.
 
-Dostęp do zarządzania kursami mają role `mentor` i `admin` (`IsCourseManager`). Pozostałe endpointy wymagają zalogowania.
+### Model kursu i treści
 
-### Modele
+- **Course** reprezentuje trwałą tożsamość kursu: właściciela, niezmienną po utworzeniu widoczność (`public` lub `private`), aktywność, token zaproszenia dla kursu prywatnego oraz wskazanie bieżącej opublikowanej wersji. Kurs nie jest samą treścią.
+- **CourseVersion** zawiera konkretną treść i numer wersji (`number`), stan (`draft`, `submitted`, `rejected`, `published`) oraz licznik rewizji (`revision`). Tytuł, opis, Zakres i Przedmiot należą do wersji. Kurs może mieć opublikowaną wersję i co najwyżej jedną wersję roboczą/zgłoszoną/odrzuconą wymagającą dalszej pracy. Utworzenie kursu tworzy wersję 1 jako `draft`; kurs nie jest automatycznie publikowany.
+- **Zakres (CourseScope)** i **Przedmiot (CourseSubject)** są słownikami zarządzanymi w Django admin. Można je dezaktywować zamiast usuwać. Do publikacji można wybrać wyłącznie aktywne pozycje.
+- Zawartość ma hierarchię **Dział → Temat → Lekcja** (`CourseNode`). Lekcje mogą zawierać osobne materiały teorii i praktyki (`LessonItem`): teoria obsługuje Markdown, PDF, obraz lub wideo; praktyka — tekst, tekst z obrazem, PDF lub obraz. Odpowiedź wzorcowa może być kluczem wyłącznie dla materiału praktycznego.
+- Test (`NodeTest`) może być przypisany do elementu hierarchii i zawiera pytania jednokrotnego albo wielokrotnego wyboru, odpowiedzi i oznaczenia poprawności. W v1 nie ma rozwiązywania testu ani oceniania.
+- Wymaganie wstępne (`NodePrerequisite`) wskazuje wcześniejszy, niezależny element tej samej wersji z testem i próg 1–100%. Jest walidowane strukturalnie, ale w v1 ma charakter informacyjny: system nie blokuje dostępu ani nie sprawdza jego spełnienia.
+- `CourseTask` i plan godzinowy pozostają niezależne od wersjonowanej treści. Zadania planu są nadal kopiowane do instancji przy dołączeniu; ich zmiany nie zmieniają treści przypiętej do istniejącej instancji.
+- `Course.approval_status`, `Course.title` i `Course.description` pozostają w bazie jako pola archiwalne/backward compatibility. Nie są źródłem bieżącego lifecycle ani treści publikacji; właściwym stanem jest wersja, a aktualny tytuł i opis pochodzą z niej.
 
-**Course** — kurs.
-- `owner` — właściciel (FK do użytkownika, `PROTECT`),
-- `title` (max 200), `description`,
-- `visibility` — `public` | `private`; nie można zmienić po utworzeniu,
-- `approval_status` — `pending` | `approved` | `rejected`,
-- `is_active` — domyślnie `true`,
-- `invite_token` — unikalny, generowany dla kursów prywatnych, `null` dla publicznych.
+### Lifecycle, moderacja i role
 
-**CourseTask** — zadanie-szablon kursu: `title` (max 255), `hours` (`DecimalField(6, 2)`, > 0), `position`.
+Nowa wersja kursu powstaje jako szkic (`draft`). Edytować można `draft` i `rejected`; każda udana zmiana treści zwiększa `revision`. Publikacja następuje jawnie przez operację lifecycle, a nie przy tworzeniu kursu. Edycja wersji nie wywołuje automatycznej reweryfikacji ani nie zmienia stanu opublikowanej wersji. Opublikowaną treść można skopiować jako nowy szkic kolejnego numeru.
 
-**Instance** — kurs ucznia: `course`, `student`, `mentor` (właściciel kursu; `null`, gdy dołącza właściciel do własnego kursu), `status` (`active` | `closed`), `closed_at`, `created_at`. Constraint `one_active_instance_per_student` wymusza jedną aktywną instancję na ucznia.
+| Operacja | Dozwolony wykonawca i warunek | Wynik |
+|---|---|---|
+| `submit` | Właściciel będący mentorem; kurs publiczny; stan `draft` lub `rejected` | `submitted`; pełna walidacja publikacji |
+| `withdraw` | Właściciel mentora/admin; wersja `submitted` | `draft` |
+| `publish` | Właściciel mentora/admin dla kursu prywatnego; administrator-właściciel kursu publicznego; stan `draft` lub `rejected` | `published`, wskazanie jako bieżącej publikacji |
+| `accept` | Administrator inny niż właściciel; zgłoszona wersja kursu publicznego | `published` po walidacji |
+| `reject` | Administrator; wersja `submitted` | `rejected`, z opcjonalnym uzasadnieniem |
 
-**InstancePeriod** — okres aktywności: `started_at`, `ended_at` (`null` = trwa). Nowy okres powstaje przy dołączeniu i każdym wznowieniu; zamknięcie kończy otwarty okres.
+Mentor nie może samodzielnie opublikować kursu publicznego: zgłasza go do moderacji. Administrator przegląda kolejkę przez `GET /api/course-moderation/`, a akceptację/odrzucenie wykonuje przez API albo akcje Django admin na wersjach. Admin udostępnia bezpośredni link do podglądu SPA; nie edytuje treści kursu przez formularz admina. Administrator tworzy wyłącznie kursy publiczne; konto łączące role mentora i administratora podlega regułom administratora. Kurs prywatny może opublikować jego właściciel.
 
-**InstanceTask** — kopia zadania w instancji: `title`, `hours`, `status` (`todo` | `in_progress` | `done`), `position`. Późniejsze zmiany zadań kursu nie wpływają na istniejące instancje.
+### Spójność edycji: ETag i `If-Match`
 
-### Reguły
+Odpowiedzi dotyczące wersji zawierają nagłówek `ETag` (wartość nieprzezroczysta dla klienta, aktualnie w formie `"v{id}-r{revision}"`). Każda mutacja istniejącej wersji (metadane, hierarchia, materiały i upload) oraz każda operacja lifecycle wymaga przesłania aktualnej wartości w `If-Match`. Tworzenie nowego szkicu i operacje na archiwum nieużywanych plików nie zmieniają rewizji i nie wymagają tego nagłówka. Brak nagłówka zwraca `400 revision_required`; nieaktualny ETag — `409 stale_revision`. Klient powinien zachować ETag z odpowiedzi i nie odtwarzać go samodzielnie.
 
-**Zatwierdzanie kursów**
-- `pending → approved` i `pending → rejected` — administrator w Django admin (`/admin/`).
-- `approved → rejected` jest zablokowane (walidacja w admin i w `save()`); każda zmiana zatwierdzonego kursu publicznego wraca do `pending` (patrz Edycja).
-- `rejected → pending` — właściciel przez `POST .../resubmit/`.
-- Mentor tworzy kurs `public` jako `pending`, a `private` jako `approved` z tokenem.
-- Administrator tworzy wyłącznie kursy `public` (zatwierdzone od razu); `private` → 403. Dla konta z rolami mentor i admin obowiązuje reguła administratora.
+### Materiały, pliki i uprawnienia
 
-**Edycja**
-- Każda zmiana zatwierdzonego kursu publicznego wymaga ponownego zatwierdzenia i przenosi go do `pending`: zmiana `title` lub `description` (także w Django admin), dodanie, edycja lub usunięcie zadania (`/tasks/`). Instancje uczniów nie są zmieniane.
-- Zmiana `is_active` nie zmienia statusu zatwierdzenia.
-- Edycja kursu `rejected` nie zmienia statusu.
+- Dozwolone pliki: PDF do **20 MB** (`20 000 000` bajtów), JPG/PNG/WebP do **5 MB** (`5 000 000` bajtów), maksymalnie **20 załączników na lekcję** i **1 GB na kurs** (`1 000 000 000` bajtów). MB/GB są dziesiętne. Limit kursu dotyczy przechowywanych plików, także nieużywanych aktualnie przez materiał.
+- Backend waliduje sygnaturę i rzeczywistą zawartość pliku; PDF-y są parsowane, a obrazy dekodowane. To nie jest skan antywirusowy ani gwarancja bezpieczeństwa pliku.
+- `CourseAsset` jest w prywatnym storage (`PRIVATE_MEDIA_ROOT`; bez tej zmiennej lokalizacja domyślna to `backend/private_media`); publiczny URL ani ścieżka do pliku nie są zwracane w JSON. Pobieranie odbywa się wyłącznie przez uwierzytelniony endpoint API, po sprawdzeniu powiązania pliku z daną wersją i uprawnień użytkownika. Nie wystawiać tego katalogu jako statycznych mediów.
+- Właściciel kursu/admin może zarządzać treścią. Podgląd ucznia zwraca projekcję bez kluczy odpowiedzi i bez flag `is_correct`. Właściciel widzi pełną treść oraz klucze. Uczeń lub mentor przypisanej instancji pobiera treść wersji przypiętej do instancji; klucze są dostępne wyłącznie w widoku właściciela/administratora.
+- `python manage.py cleanup_course_assets` ponawia niedokończone usuwanie i usuwa osierocone, nieśledzone pliki starsze niż 24 godziny (próg można zmienić przez `--older-than-hours`). Zalecane okresowe uruchamianie; polecenie nie zastępuje backupu.
 
-**Tokeny linków**
-- Token: `secrets.token_urlsafe(32)`. Regeneracja unieważnia poprzedni token (nieznany token → 404). Dotyczy tylko kursów prywatnych (dla publicznych → 409). Istniejące instancje nie są zmieniane.
+### Migracja istniejących danych
 
-**Dołączanie** (`join` i `join/{token}`)
-- Dołączyć może użytkownik z rolą `student` lub właściciel kursu. Inny użytkownik bez roli `student` → 403, o ile kurs jest widoczny; w przeciwnym razie 404.
-- Kurs musi być aktywny (`course_inactive`, także gdy uczeń ma już instancję tego kursu), `approved` (dla innych użytkowników `pending`/`rejected` → 404; właściciel dostaje 409 `course_not_approved`) i, dla kursu prywatnego, dostępny przez token.
-- Ponowne dołączenie do aktywnego kursu z aktywną instancją zwraca 200 z tą samą instancją.
-- Limit jednej aktywnej instancji na ucznia: `slot_taken`. Zamknięta instancja nie blokuje nowej.
-- Przy dołączeniu zadania kursu są kopiowane do instancji ze statusem `todo`.
+Migracje `0002_course_versions_schema`–`0004_require_instance_version` dodają model wersji i treści, wykonują backfill oraz sprawdzają kompletność i zgodność przypięcia instancji. `0003_backfill_course_versions` tworzy dla dotychczasowych kursów wersję 1 i przypina do niej istniejące instancje. Mapowanie: `approved → published`, `pending → submitted`, `rejected → rejected`; tytuł i opis są kopiowane z legacy pól kursu. Migracja nie odtwarza dla istniejących danych hierarchii, materiałów ani testów.
 
-**Zmiana statusu zadania** (`PATCH .../tasks/{id}/`)
-- Mentor instancji — tak. Uczeń instancji bez mentora — tak. Uczeń instancji z mentorem — 403.
-- Zamknięta instancja → 409 `instance_closed`.
-- Pole `progress` jest tylko do odczytu.
+Przed migracją wykonaj i sprawdź backup bazy. Odwrócenie schematu po nowych zapisach nie jest bezpiecznym rollbackiem: dane wersji mogą zostać utracone. W razie potrzeby powrotu do poprzedniego stanu odtwórz backup wykonany przed migracją.
 
-**Postęp**
-- Procent godzin zadań `done` względem sumy godzin wszystkich zadań; `Decimal`, zaokrąglenie do 1 miejsca (ROUND_HALF_UP), zwracany jako liczba. Brak zadań → `0.0`.
+### REST API: wersjonowana treść
 
-**Zamykanie i wznowienie**
-- Zamknięcie: mentor instancji lub uczeń instancji bez mentora. Ustawia `status=closed` i `closed_at`, kończy otwarte okresy. Zamknięta → 409 `already_closed`. Działa także dla nieaktywnego kursu.
-- Wznowienie: te same reguły dostępu co przy zamknięciu. Zeruje `closed_at` i dodaje nowy `InstancePeriod`. Wymaga: instancji zamkniętej (`already_active`), zatwierdzonego kursu (`course_not_approved`), aktywnego kursu (`course_inactive`) oraz braku innej aktywnej instancji ucznia (`slot_taken`).
-- System nie zapisuje, kto zamknął instancję; wznowienie podlega tym samym regułom dostępu.
+Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesję. Trasy treści wymagają zalogowania, a odczyt/edycja wersji i zasobów kursu — uprawnień właściciela-mentora lub administratora. `course-moderation` jest dostępne administratorowi. Odpowiedzi wersji zawierają `ETag`.
 
-**Licznik uczniów**
-- `GET /api/courses/mine/{id}/students-count/` zlicza instancje `active` z `mentor` = bieżący użytkownik. Zamknięte i instancje bez mentora się nie liczą.
+| Metoda | Ścieżka | Opis |
+|---|---|---|
+| GET | `/course-scopes/`, `/course-subjects/` | Aktywne pozycje słowników |
+| GET, POST | `/courses/{course_id}/versions/` | Lista wersji; POST tworzy nową wersję przez skopiowanie bieżącej publikacji |
+| GET, PATCH | `/courses/{course_id}/versions/{version_id}/` | Pełna treść wersji; PATCH zmienia metadane |
+| GET | `.../validation/`, `.../student-preview/` | Walidacja publikacji; podgląd bez kluczy odpowiedzi |
+| POST | `.../submit/`, `.../withdraw/`, `.../publish/`, `.../accept/`, `.../reject/` | Przejścia lifecycle; `reject` przyjmuje opcjonalne `reason` |
+| POST | `.../nodes/`; PATCH, DELETE | Dodanie działu/tematu/lekcji; edycja tytułu lub usunięcie węzła |
+| POST | `.../nodes/{node_id}/move/` | Zmiana kolejności rodzeństwa (`direction: up/down`) |
+| PUT, DELETE | `.../nodes/{node_id}/prerequisite/` | Ustawienie/usunięcie informacyjnego wymagania wstępnego |
+| POST, PUT, DELETE | `.../nodes/{node_id}/test/` | Utworzenie, zastąpienie lub usunięcie testu |
+| POST | `.../lessons/{lesson_id}/items/` | Dodanie materiału teorii/praktyki |
+| PATCH, DELETE | `.../lessons/{lesson_id}/items/{item_id}/` | Edycja/usunięcie materiału |
+| POST | `.../lessons/{lesson_id}/items/{item_id}/move/` | Zmiana kolejności materiału w kategorii |
+| POST | `.../assets/` | Wgranie jednego pliku w polu multipart `file` |
+| GET | `/courses/{course_id}/assets/` | Lista plików, quota i liczba odwołań |
+| DELETE | `/courses/{course_id}/assets/{asset_id}/` | Usunięcie nieużywanego pliku |
+| GET | `.../assets/{asset_id}/download/` | Prywatne pobranie załącznika należącego do wersji |
+| GET | `/course-moderation/` | Kolejka zgłoszonych wersji dla administratora |
+| GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; bez kluczy dla ucznia i mentora |
 
-### Endpointy
+Podstawowe endpointy kursów, zadań planu i instancji pozostają dostępne pod `/api/courses/` i `/api/instances/` (tworzenie i lista kursów, dołączanie, zadania `CourseTask`, plan godzinowy, status i cykl życia instancji). Są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Legacy `POST /api/courses/{id}/resubmit/` pozostaje zgodnościowym endpointem operującym na odrzuconej wersji; nowy klient powinien używać wersjonowanego `.../submit/`.
 
-Prefiks: `/api/`. Uwierzytelnianie: `Authorization: Token <token>` lub sesja.
+### Błędy API
 
-| Metoda | Ścieżka | Kto | Opis |
-|---|---|---|---|
-| GET | `/courses/` | zalogowany | Lista kursów publicznych, zatwierdzonych i aktywnych |
-| POST | `/courses/` | mentor, admin | Tworzy kurs (`title`, `description`, `visibility`) |
-| GET | `/courses/mine/` | mentor, admin | Własne kursy, wszystkie statusy |
-| GET | `/courses/mine/{id}/` | właściciel | Szczegóły; dla prywatnego zawiera `invite_token` |
-| GET | `/courses/mine/{id}/students-count/` | właściciel | Liczba aktywnych uczniów z mentorem |
-| GET | `/courses/{id}/` | zalogowany (widoczny) | Szczegóły kursu |
-| PATCH | `/courses/{id}/` | właściciel | `title`, `description`, `is_active` |
-| POST | `/courses/{id}/resubmit/` | właściciel | `rejected → pending` |
-| POST | `/courses/{id}/regenerate-token/` | właściciel | Nowy `invite_token` (tylko prywatne) |
-| POST | `/courses/{id}/join/` | student, właściciel | Dołączenie (tworzy lub zwraca instancję) |
-| POST | `/courses/join/{token}/` | student, właściciel | Dołączenie przez link z tokenem |
-| POST | `/courses/{id}/tasks/` | właściciel | Dodaje zadanie kursu (`title`, `hours`, `position`) |
-| PATCH | `/courses/{id}/tasks/{task_id}/` | właściciel | Edycja zadania kursu |
-| DELETE | `/courses/{id}/tasks/{task_id}/` | właściciel | Usunięcie zadania kursu |
-| GET | `/instances/` | zalogowany | Instancje, w których jest uczniem lub mentorem |
-| GET | `/instances/{id}/` | uczeń lub mentor instancji | Szczegóły z `progress` i `tasks` |
-| PATCH | `/instances/{id}/tasks/{task_id}/` | zgodnie z regułami | Body: `{"status": "todo" \| "in_progress" \| "done"}` |
-| POST | `/instances/{id}/close/` | zgodnie z regułami | Zamknięcie |
-| POST | `/instances/{id}/resume/` | zgodnie z regułami | Wznowienie |
-
-Metody spoza tabeli (np. `PATCH /instances/{id}/`) zwracają 405.
-
-### Błędy
-
-- **Format domenowy:** `{"code": "...", "detail": "..."}`.
-- **Format DRF:** błędy walidacji (400) i część błędów uprawnień/404 mają `{"detail": "..."}` lub `{"pole": ["..."]}` bez pola `code`.
-- **400** — walidacja (pusty lub za długi `title`, `visibility` spoza listy, `hours` ≤ 0 lub z więcej niż 2 miejscami, `status` spoza listy, próba zmiany `visibility`).
-- **401** — brak lub nieprawidłowy token.
-- **403** — zasób widoczny, ale akcja zabroniona (`code: forbidden`) lub brak roli mentor/admin (sam `detail`).
-- **404** — zasób niewidoczny lub nieistniejący, w tym nieznany lub unieważniony token (`code: not_found` lub `detail`).
-- **409** — reguła biznesowa:
-
-| Kod | Znaczenie |
-|---|---|
-| `course_not_approved` | Kurs nie został zatwierdzony |
-| `course_not_rejected` | Ponowne zgłoszenie tylko dla kursu odrzuconego |
-| `course_not_private` | Regeneracja tokenu tylko dla kursu prywatnego |
-| `course_inactive` | Kurs jest nieaktywny |
-| `slot_taken` | Uczeń ma już aktywną instancję innego kursu |
-| `already_closed` | Instancja jest już zamknięta |
-| `already_active` | Instancja jest już aktywna |
-| `instance_closed` | Zamknięta instancja jest tylko do odczytu |
+W rodzinach endpointów kursów, instancji, słowników i moderacji odpowiedzi błędów mają format `{"message": "...", "code": "...", ...}`. Inne pola — np. `issues`, `dependencies` lub szczegóły walidacji — mogą wystąpić dodatkowo. Kody statusów: `400 validation_error`, `401 not_authenticated`, `403 forbidden` (lub `csrf_failed`), `404 not_found`, `405 method_not_allowed`, `409 conflict`, `413 request_too_large`, `415 unsupported_media_type`, `429 throttled`, `500 internal_error`, `503 service_unavailable`. Błędy walidacji plików i treści zachowują kod domenowy, np. `revision_required` (400), `invalid_file`, `file_too_large` (413), `invalid_material`, `invalid_prerequisite`, `version_incomplete`, `classification_invalid`, `attachment_limit_exceeded`; konflikty (409) obejmują m.in. `stale_revision`, `invalid_version_state`, `working_version_exists`, `asset_in_use`, `course_not_approved`, `course_inactive`, `slot_taken`, `instance_closed`.
 
 ### Trasy frontendu
 
-Wszystkie trasy poniżej wymagają zalogowania (`RequireAuth`); `/kursy/moje*` dodatkowo roli mentor/admin (`RequireManager`).
+Trasy kursów wymagają logowania; zarządzanie i edycja wymagają roli mentor/admin.
 
 | Trasa | Widok |
 |---|---|
-| `/kursy` | Lista kursów |
-| `/kursy/{id}` | Szczegóły kursu i przycisk dołączenia |
-| `/kursy/dolacz/{token}` | Dołączenie przez link (przekierowuje do instancji) |
-| `/kursy/instancje/{id}` | Instancja: postęp, zadania, zamknięcie/wznowienie |
-| `/kursy/moje` | Kursy mentora |
-| `/kursy/moje/nowy` | Formularz nowego kursu |
-| `/kursy/moje/{id}` | Zarządzanie kursem: uczniowie, link, dezaktywacja, licznik |
+| `/kursy` | Katalog tylko opublikowanych, aktywnych kursów publicznych; pokazuje program (drzewo działów/tematów/lekcji), bez materiałów i testów; mentor/admin ma przycisk „Utwórz nowy” i wejście do „Moich kursów” |
+| `/kursy/{id}` | Szczegóły widocznego kursu i dołączanie |
+| `/kursy/dolacz/{token}` | Dołączenie do kursu prywatnego przez link |
+| `/kursy/instancje/{id}` | Instancja ucznia, postęp, zadania i treść przypiętej wersji |
+| `/kursy/moje` | Lista kursów mentora/admina |
+| `/kursy/moje/nowy` | Utworzenie tożsamości kursu i wersji 1 w stanie roboczym |
+| `/kursy/moje/{id}` | Zarządzanie kursem, planem godzinowym, wersjami i tokenem |
+| `/kursy/moje/{id}/wersje/{versionId}/edytuj` | Edytor wersji kursu |
+| `/kursy/podglad/{id}/wersje/{versionId}` | Podgląd SPA; przełącznik pełnego widoku i „Oczami ucznia”; moderator może stąd podjąć decyzję |
+| `/course-moderation/` | Kolejka moderacji administratora |
+
+### Kursy v1 — ograniczenia i weryfikacja (30.10.2026)
+
+Weryfikacja funkcji: backend SQLite **316 OK / 8 skip**, PostgreSQL **316/316 OK**, `makemigrations --check` bez zmian, `manage.py check` — **0 issues**; frontend **230 passed / 1 skip**, build OK, smoke API OK; niezależne QA — **POZYTYWNY**. Niestabilny test frontendu `join-by-token` (wyścig mocka POST) ustabilizowano synchronizacją w teście; 30/30 przebiegów OK. QA nie zweryfikowało ręcznie responsywności J6 w pełnej przeglądarce.
+
+Ograniczenia: v1 nie obsługuje rozwiązywania ani oceniania testów; wymagania wstępne nie są egzekwowane; walidacja plików nie jest skanowaniem antywirusowym. Responsywność J6 nie została zweryfikowana manualnie w pełnej przeglądarce przez QA.
 
 ## Konfiguracja
 

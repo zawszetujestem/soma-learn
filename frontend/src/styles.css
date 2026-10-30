@@ -1514,3 +1514,34 @@ button.nav-login:hover {
 		transition-duration: 0.01ms !important;
 	}
 }
+/* Versioned course content: intrinsic sizes must never widen the page. */
+.version-editor, .course-section, .content-node, .hierarchy-node, .item-form { min-width: 0; overflow-wrap: anywhere; }
+.editor-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.version-editor input:not([type="checkbox"]), .version-editor select, .version-editor textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+.version-editor .field { display: flex; flex-direction: column; gap: .4rem; margin-block: .8rem; }
+.hierarchy-list, .version-program { padding-inline-start: clamp(.6rem, 2vw, 1.5rem); }
+.hierarchy-node { margin-block: 1rem; border-inline-start: 2px solid #d5dacd; padding-inline-start: clamp(.5rem, 1.5vw, 1rem); }
+.hierarchy-node section { min-width: 0; }
+.version-editor details { margin-block: 1rem; }
+.version-editor summary { cursor: pointer; font-weight: 600; }
+.item-form, .test-editor fieldset { border: 1px solid #d5dacd; border-radius: .6rem; padding: clamp(.5rem, 2vw, 1rem); margin-block: 1rem; min-width: 0; }
+.course-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.course-actions > *, .courses-header .button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.private-image { display: block; max-width: 100%; height: auto; }
+.safe-markdown { overflow-wrap: anywhere; min-width: 0; }
+.safe-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.safe-markdown table { display: block; max-width: 100%; overflow-x: auto; }
+.content-node { border-inline-start: 2px solid #d5dacd; padding-inline-start: clamp(.5rem, 2vw, 1rem); margin-block: 1rem; }
+.confirm-backdrop { position: fixed; inset: 0; z-index: 20; background: #10251c88; display: grid; place-items: center; padding: 1rem; }
+.confirm-dialog { width: min(100%, 32rem); max-height: 90dvh; overflow-y: auto; padding: 1.3rem; background: #fffdf6; border-radius: 1rem; overflow-wrap: anywhere; }
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid #285f47; outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 480px) { .version-editor .course-actions { display: flex; flex-direction: column; align-items: stretch; } .version-editor .button { padding-inline: .7rem; } .hierarchy-list { list-style: none; padding-inline-start: 0; } }
+
+.version-editor .field :is(input,textarea,select), .version-preview .field textarea { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; color: var(--ink); background: #fff; max-width: 100%; min-width: 0; }
+.version-editor textarea { min-height: 6rem; resize: vertical; }
+.version-editor input[type="checkbox"] { width: 1.15rem; height: 1.15rem; accent-color: var(--forest); }
+
+/* Grid tracks must shrink even with unbroken version titles and classifications. */
+.courses-page, .course-card, .student-card { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
+.courses-page > *, .course-grid > li, .course-card > *, .student-card > * { min-width: 0; }

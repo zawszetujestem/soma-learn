@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { Program } from './VersionContent.jsx'
 import { coursesApi } from './api.js'
 import { approvalLabels, formatHours } from './format.js'
 import { isStudent, useCurrentUser, useLoader } from './RequireAuth.jsx'
@@ -24,7 +25,7 @@ export default function CourseDetailPage() {
     if (detail.error.kind === 'notFound') {
       return (
         <main className="courses-page page-width">
-          <p className="courses-empty">Nie znaleziono kursu.</p>
+          <p className="courses-empty">Nie znaleziono kursu.</p><ErrorMessage>{detail.error.message}</ErrorMessage>
           <Link className="text-link" to="/kursy">Wróć do listy kursów</Link>
         </main>
       )
@@ -48,6 +49,7 @@ export default function CourseDetailPage() {
         {course.description && <p>{course.description}</p>}
       </header>
 
+      <section className="course-section" aria-label="Program publikacji"><h2>Program kursu</h2><p>{course.scope?.name} {course.subject?.name}</p><Program nodes={course.program}/></section>
       <section aria-labelledby="course-tasks-title" className="course-section">
         <h2 id="course-tasks-title">Zadania w kursie</h2>
         {course.tasks.length === 0 ? (

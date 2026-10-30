@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { coursesApi } from './api.js'
+import VersionContent from './VersionContent.jsx'
+import { contentApi, coursesApi } from './api.js'
 import { formatPercent, instanceStatusLabels } from './format.js'
 import { useCurrentUser, useLoader } from './RequireAuth.jsx'
 import { InstanceControls, TaskBoard } from './InstanceParts.jsx'
@@ -16,8 +17,8 @@ export default function InstancePage() {
   const user = useCurrentUser()
   const detail = useLoader(async () => {
     const instance = await coursesApi.getInstance(id)
-    const course = await coursesApi.getCourse(instance.course)
-    return { instance, course }
+    const content = await contentApi.instanceContent(id)
+    return { instance, content }
   }, [id])
 
   if (detail.status === 'loading') {
@@ -27,7 +28,7 @@ export default function InstancePage() {
     if (detail.error.kind === 'notFound') {
       return (
         <main className="courses-page page-width">
-          <p className="courses-empty">Nie znaleziono instancji.</p>
+          <p className="courses-empty">Nie znaleziono instancji.</p><ErrorMessage>{detail.error.message}</ErrorMessage>
           <Link className="text-link" to="/kursy">Wróć do listy kursów</Link>
         </main>
       )
@@ -43,7 +44,7 @@ export default function InstancePage() {
 }
 
 function InstanceView({ user, data, setData, id }) {
-  const { instance, course } = data
+  const { instance, content } = data
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
@@ -82,9 +83,9 @@ function InstanceView({ user, data, setData, id }) {
     <main className="courses-page page-width">
       <header className="courses-header">
         <p className="eyebrow">{instanceStatusLabels[instance.status]}</p>
-        <h1>{course.title}</h1>
+        <h1>{content.title}</h1>
         <p>Postęp: <span>{formatPercent(instance.progress)}</span></p>
-        <Link className="text-link" to={`/kursy/${course.id}`}>Wróć do kursu</Link>
+        <Link className="text-link" to={`/kursy/${instance.course}`}>Wróć do kursu</Link>
       </header>
 
       {!isActive && (
@@ -106,6 +107,7 @@ function InstanceView({ user, data, setData, id }) {
         </div>
       )}
 
+      <VersionContent version={content} courseId={instance.course} student={content.course_owner !== user.id && !user.roles.includes('admin')} />
       <section className="course-section" aria-labelledby="instance-tasks-title">
         <h2 id="instance-tasks-title">Zadania</h2>
         <TaskBoard

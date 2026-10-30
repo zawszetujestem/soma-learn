@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,6 +34,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'learning.middleware.LearningErrorMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -131,6 +133,8 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
+# Private media is never exposed by config.urls (also in DEBUG).
+MEDIA_ROOT = Path(os.getenv('PRIVATE_MEDIA_ROOT') or BASE_DIR / 'private_media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
@@ -200,7 +204,11 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+# Version editing uses optimistic concurrency from the browser client.
+CORS_ALLOW_HEADERS = (*default_headers, 'if-match')
+CORS_EXPOSE_HEADERS = ['ETag']
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+CSRF_FAILURE_VIEW = 'learning.api_errors.csrf_failure'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = not DEBUG
@@ -208,6 +216,7 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = not DEBUG
 
 REST_FRAMEWORK = {
+    'EXCEPTION_HANDLER': 'learning.api_errors.exception_handler',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',

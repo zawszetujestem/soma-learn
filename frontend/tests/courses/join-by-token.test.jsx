@@ -35,6 +35,8 @@ describe('dołączanie przez link zaproszenia (/kursy/dolacz/:token)', () => {
     renderApp(`/kursy/dolacz/${TOKEN}`)
 
     expect(await screen.findByText(/dołączamy do kursu/i)).toBeInTheDocument()
+    // Komunikat ładowania może pojawić się, zanim mock POST zostanie wywołany.
+    await waitFor(() => expect(finish).toBeTypeOf('function'))
     finish()
 
     await waitFor(() => expect(currentPath()).toBe('/kursy/instancje/12'))

@@ -1,3 +1,4 @@
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
@@ -10,6 +11,8 @@ from .models import CourseTask, InstanceTask
 from .permissions import IsCourseManager
 from .serializers import (
     CourseSerializer,
+    CourseCreateSerializer,
+    CourseIdentitySerializer,
     CourseTaskSerializer,
     InstanceSerializer,
     InstanceTaskSerializer,
@@ -35,16 +38,11 @@ class CourseListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return services.public_courses().prefetch_related('tasks')
 
+    @extend_schema(request=CourseCreateSerializer, responses={201: ManageCourseSerializer})
     def create(self, request, *args, **kwargs):
-        serializer = CourseSerializer(data=request.data)
+        serializer = CourseCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        course = services.create_course(
-            request.user,
-            title=data['title'],
-            description=data.get('description', ''),
-            visibility=data['visibility'],
-        )
+        course = services.create_course(request.user, **serializer.validated_data)
         return Response(ManageCourseSerializer(course).data, status=status.HTTP_201_CREATED)
 
 
@@ -93,10 +91,10 @@ class CourseDetailView(generics.RetrieveUpdateAPIView):
             return services.owned_courses(self.request.user).prefetch_related('tasks')
         return services.visible_courses(self.request.user).prefetch_related('tasks')
 
-    @extend_schema(request=CourseSerializer, responses=ManageCourseSerializer)
+    @extend_schema(request=CourseIdentitySerializer, responses=ManageCourseSerializer)
     def partial_update(self, request, *args, **kwargs):
         course = self.get_object()
-        serializer = CourseSerializer(course, data=request.data, partial=True)
+        serializer = CourseIdentitySerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         course = services.update_course(course, serializer.validated_data)
         return Response(ManageCourseSerializer(course).data)
@@ -109,8 +107,11 @@ class CourseResubmitView(APIView):
     @extend_schema(request=None, responses=ManageCourseSerializer)
     def post(self, request, pk):
         course = services.get_owned_course(request.user, pk)
-        course = services.resubmit_course(course)
-        return Response(ManageCourseSerializer(course).data)
+        version = services.resubmit_course(course, request.user, request.headers.get('If-Match'))
+        from .content_services import etag
+        response = Response(ManageCourseSerializer(course).data)
+        response['ETag'] = etag(version)
+        return response
 
 
 class CourseRegenerateTokenView(APIView):
@@ -159,8 +160,9 @@ class CourseTaskCreateView(APIView):
         course = services.get_owned_course(request.user, pk)
         serializer = CourseTaskSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(course=course)
-        services.mark_course_content_changed(course)
+        with transaction.atomic():
+            course = services.Course.objects.select_for_update().get(pk=course.pk)
+            serializer.save(course=course)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -178,13 +180,14 @@ class CourseTaskDetailView(generics.UpdateAPIView, generics.DestroyAPIView):
         )
 
     def perform_update(self, serializer):
-        serializer.save()
-        services.mark_course_content_changed(serializer.instance.course)
+        with transaction.atomic():
+            services.Course.objects.select_for_update().get(pk=serializer.instance.course_id)
+            serializer.save()
 
     def perform_destroy(self, instance):
-        course = instance.course
-        instance.delete()
-        services.mark_course_content_changed(course)
+        with transaction.atomic():
+            services.Course.objects.select_for_update().get(pk=instance.course_id)
+            instance.delete()
 
 
 class InstanceListView(generics.ListAPIView):

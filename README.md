@@ -67,7 +67,34 @@ To publiczne dane **wyłącznie do lokalnego developmentu**, nie do produkcji. L
 
 Stos ma osobną nazwę `soma-learn-local-dev` i nowy wolumen `soma-learn-local-dev-pg18-data`. Nie importuje SQLite ani danych ze starych kontenerów. Porty Mailpita zmieniono na **1027/8027**, ponieważ wcześniejszy `soma-learn-mailpit-1` zajmuje 1026/8026; stare zasoby pozostają nietknięte.
 
-Backend i frontend mają podmontowany kod oraz automatyczne przeładowanie. Vite korzysta z pollingu na Windowsie i osobnego linuksowego wolumenu `node_modules`. Po zmianie zależności wykonaj ponownie `docker compose up --build --wait`.
+Backend i frontend mają podmontowany kod oraz automatyczne przeładowanie. Vite korzysta z pollingu na Windowsie i osobnego linuksowego wolumenu `node_modules`. Po zmianie zależności wykonaj ponownie `docker compose up --build --wait` (bez `-v`).
+
+#### Trwały prywatny storage materiałów kursów
+
+Pliki kursów nie są publicznymi mediami i są pobierane wyłącznie przez uwierzytelnione API. W Docker Compose `PRIVATE_MEDIA_ROOT=/var/lib/soma/private-media` jest montowany z nazwanego wolumenu `soma-learn-local-dev-private-course-media`; `docker compose down` i ponowny `up` zachowują pliki. **Nie używaj `docker compose down -v`**, jeśli chcesz zachować dane — usuwa wolumen PostgreSQL oraz prywatne pliki kursów (obok kont, administratora i innych danych lokalnego stosu). Pełny reset wykonuj tylko świadomie.
+
+Przy lokalnym uruchomieniu backendu bez kontenera, z katalogu `backend/`, zainstaluj zależności i wykonaj migracje; frontend uruchamiaj niezależnie z `frontend/`:
+
+```powershell
+Set-Location backend
+pip install -r requirements.txt
+python manage.py migrate
+Set-Location ..\frontend
+npm install
+npm run dev -- --host 127.0.0.1
+```
+
+Po aktualizacji obrazu/zależności lub konfiguracji Compose przebuduj i uruchom ponownie usługi, zachowując wolumeny:
+
+```powershell
+Set-Location ..
+docker compose up --build --wait
+# Zwykłe zatrzymanie i ponowny start zachowują bazę i private media:
+docker compose down
+docker compose up --wait
+```
+
+Dla danych produkcyjnych skonfiguruj trwały, chroniony backup storage i bazy; wolumen lokalnego developmentu nie jest backupem.
 
 ### Opcjonalna konfiguracja
 

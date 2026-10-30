@@ -20,6 +20,7 @@ services:
     build: ./backend
     command: sh -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8001"
     environment:
+      PRIVATE_MEDIA_ROOT: /var/lib/soma/private-media
       DEBUG: "true"
       SECRET_KEY: ${DOCKER_SECRET_KEY:-local-only-not-for-production-secret-key}
       USE_SQLITE: "false"
@@ -49,6 +50,7 @@ services:
       - "127.0.0.1:8001:8001"
     volumes:
       - ./backend:/app
+      - private-course-media:/var/lib/soma/private-media
     depends_on:
       db:
         condition: service_healthy
@@ -99,3 +101,5 @@ volumes:
     name: soma-learn-local-dev-pg18-data
   frontend-node-modules:
     name: soma-learn-local-dev-frontend-node-modules
+  private-course-media:
+    name: soma-learn-local-dev-private-course-media

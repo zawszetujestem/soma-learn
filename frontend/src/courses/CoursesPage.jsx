@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { coursesApi } from './api.js'
 import { formatHours } from './format.js'
-import { isStudent, useCurrentUser, useLoader } from './RequireAuth.jsx'
+import { isStudent, isManager, useCurrentUser, useLoader } from './RequireAuth.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
 
 export function JoinCourseButton({ courseId, disabled = false }) {
@@ -59,6 +59,9 @@ export default function CoursesPage() {
       <header className="courses-header">
         <p className="eyebrow">Przestrzeń kursów</p>
         <h1>Kursy</h1>
+        {isManager(user) && <Link className="button button-primary" to="/kursy/moje/nowy">Utwórz nowy</Link>}
+        {isManager(user) && <Link className="text-link" to="/kursy/moje">Moje kursy</Link>}
+        {user.roles.includes('admin') && <Link className="text-link" to="/course-moderation/">Moderacja kursów</Link>}
       </header>
 
       {catalog.status === 'loading' && <LoadingMessage>Ładowanie kursów…</LoadingMessage>}
@@ -90,6 +93,7 @@ function CourseCatalog({ data, student, user }) {
               <article className="course-card">
                 <h2>{course.title}</h2>
                 {course.description && <p>{course.description}</p>}
+                <p>{course.scope?.name} {course.subject?.name}</p>
                 <p className="course-meta">
                   Zadania: {course.tasks.length}
                   {' · '}

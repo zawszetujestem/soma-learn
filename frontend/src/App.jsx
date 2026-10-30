@@ -5,6 +5,8 @@ import { logout, logoutUnconfirmedError } from './authApi.js'
 import CoursesPage from './courses/CoursesPage.jsx'
 import CourseDetailPage from './courses/CourseDetailPage.jsx'
 import CourseEditorPage from './courses/CourseEditorPage.jsx'
+import VersionEditorPage from './courses/VersionEditorPage.jsx'
+import VersionPreviewPage, { CourseModerationPage } from './courses/VersionPreviewPage.jsx'
 import { getToken } from './courses/api.js'
 import InstancePage from './courses/InstancePage.jsx'
 import JoinByTokenPage from './courses/JoinByTokenPage.jsx'
@@ -249,7 +251,9 @@ export default function App() {
             <Route index element={<MyCoursesPage />} />
             <Route path="nowy" element={<CourseEditorPage />} />
             <Route path=":id" element={<MentorCourseDetailPage />} />
+            <Route path=":id/wersje/:versionId/edytuj" element={<VersionEditorPage />} />
           </Route>
+          <Route element={<RequireManager />}><Route path="/kursy/podglad/:id/wersje/:versionId" element={<VersionPreviewPage />} /><Route path="/course-moderation/" element={<CourseModerationPage />} /></Route>
           <Route path="/kursy/:id" element={<CourseDetailPage />} />
         </Route>
         <Route path="/logowanie" element={<GuestOnly><LoginPage /></GuestOnly>} />

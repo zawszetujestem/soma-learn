@@ -75,38 +75,23 @@ class CourseModelTests(TestCase):
         course.refresh_from_db()
         self.assertEqual(course.approval_status, Course.ApprovalStatus.PENDING)
 
-    def test_approved_cannot_be_rejected(self):
+    def test_archival_approval_change_does_not_change_version_or_publication(self):
         course = make_course(self.owner)
-        course.approval_status = Course.ApprovalStatus.REJECTED
-        with self.assertRaises(ValidationError):
+        publication=course.current_published_version_id
+        for status in ['rejected','pending','approved']:
+            course.approval_status=status
             course.save()
-        course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.APPROVED)
+            course.refresh_from_db()
+            self.assertEqual(course.current_published_version_id,publication)
+            self.assertEqual(course.versions.get().state,'published')
 
-    def test_rejected_cannot_be_approved_directly(self):
-        course = make_course(self.owner, status=Course.ApprovalStatus.REJECTED)
-        course.approval_status = Course.ApprovalStatus.APPROVED
-        with self.assertRaises(ValidationError):
-            course.save()
-
-    def test_approved_cannot_go_back_to_pending_without_content_change(self):
-        course = make_course(self.owner)
-        course.approval_status = Course.ApprovalStatus.PENDING
-        with self.assertRaises(ValidationError):
-            course.save()
-
-    def test_request_reverification_moves_approved_course_to_pending(self):
-        course = make_course(self.owner)
-        course.request_reverification()
-        course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.PENDING)
-
-    def test_content_change_of_approved_public_course_returns_it_to_pending_on_plain_save(self):
-        course = make_course(self.owner)
-        course.title = 'Zmieniony tytul'
+    def test_legacy_content_save_does_not_reverify(self):
+        course=make_course(self.owner)
+        course.title='Changed archive'
         course.save()
         course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.PENDING)
+        self.assertEqual(course.approval_status,'approved')
+        self.assertNotEqual(course.current_published_version.title,course.title)
 
     def test_deactivation_of_approved_course_keeps_approval(self):
         course = make_course(self.owner)
@@ -130,11 +115,11 @@ class InstanceModelTests(TestCase):
         self.course_b = make_course(self.owner, title='Drugi kurs')
 
     def test_student_can_have_only_one_active_instance(self):
-        Instance.objects.create(course=self.course_a, student=self.student)
+        Instance.objects.create(course=self.course_a, course_version=self.course_a.versions.first(), student=self.student)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Instance.objects.create(course=self.course_b, student=self.student)
+            Instance.objects.create(course=self.course_b, course_version=self.course_b.versions.first(), student=self.student)
 
     def test_closed_instance_does_not_block_new_active_instance(self):
-        Instance.objects.create(course=self.course_a, student=self.student, status=Instance.Status.CLOSED)
-        Instance.objects.create(course=self.course_b, student=self.student)
+        Instance.objects.create(course=self.course_a, course_version=self.course_a.versions.first(), student=self.student, status=Instance.Status.CLOSED)
+        Instance.objects.create(course=self.course_b, course_version=self.course_b.versions.first(), student=self.student)
         self.assertEqual(Instance.objects.filter(student=self.student, status=Instance.Status.ACTIVE).count(), 1)

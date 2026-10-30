@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
-from .models import Course, Instance, InstancePeriod, InstanceTask
+from .models import Course, CourseVersion, Instance, InstancePeriod, InstanceTask
 
 
 class DomainError(APIException):
@@ -28,10 +28,13 @@ def conflict(code, detail):
 
 
 def visible_courses(user):
-    has_instance = Instance.objects.filter(course=OuterRef('pk'), student=user)
-    return Course.objects.annotate(has_instance=Exists(has_instance)).filter(
+    has_instance = Instance.objects.filter(Q(student=user) | Q(mentor=user), course=OuterRef('pk'))
+    courses = Course.objects.filter(current_published_version__isnull=False)
+    if user.has_role('admin'):
+        return courses
+    return courses.annotate(has_instance=Exists(has_instance)).filter(
         Q(owner=user)
-        | Q(visibility=Course.Visibility.PUBLIC, approval_status=Course.ApprovalStatus.APPROVED, is_active=True)
+        | Q(visibility=Course.Visibility.PUBLIC, current_published_version__isnull=False, is_active=True)
         | Q(has_instance=True)
     )
 
@@ -39,9 +42,11 @@ def visible_courses(user):
 def public_courses():
     return Course.objects.filter(
         visibility=Course.Visibility.PUBLIC,
-        approval_status=Course.ApprovalStatus.APPROVED,
+        current_published_version__isnull=False,
         is_active=True,
-    )
+    ).select_related(
+        'current_published_version__scope', 'current_published_version__subject'
+    ).prefetch_related('tasks', 'current_published_version__nodes')
 
 
 def owned_courses(user):
@@ -80,23 +85,17 @@ def _check_write_access(user, instance):
     raise not_found()
 
 
-def create_course(user, *, title, description, visibility):
-    if user.has_role('admin'):
-        if visibility == Course.Visibility.PRIVATE:
-            raise forbidden('Administrator tworzy wyłącznie kursy publiczne.')
-        approval = Course.ApprovalStatus.APPROVED
-    elif visibility == Course.Visibility.PRIVATE:
-        approval = Course.ApprovalStatus.APPROVED
-    else:
-        approval = Course.ApprovalStatus.PENDING
-    course = Course(
-        owner=user,
-        title=title,
-        description=description,
-        visibility=visibility,
-        approval_status=approval,
-    )
-    course.save()
+@transaction.atomic
+def create_course(user, *, visibility, title='', description='', scope_id=None, subject_id=None):
+    if not (user.has_role('mentor') or user.has_role('admin')):
+        raise forbidden('Tworzenie kursów wymaga roli mentora lub administratora.')
+    if user.has_role('admin') and visibility == Course.Visibility.PRIVATE:
+        raise forbidden('Administrator tworzy wyłącznie kursy publiczne.')
+    course = Course.objects.create(owner=user, title=title, description=description,
+        visibility=visibility, approval_status=Course.ApprovalStatus.PENDING)
+    version = CourseVersion.objects.create(course=course, number=1)
+    from .content_services import update_metadata
+    update_metadata(version, dict(title=title,description=description,scope_id=scope_id,subject_id=subject_id))
     return course
 
 
@@ -107,17 +106,12 @@ def update_course(course, data):
     return course
 
 
-def mark_course_content_changed(course):
-    if course.visibility == Course.Visibility.PUBLIC and course.approval_status == Course.ApprovalStatus.APPROVED:
-        course.request_reverification()
-
-
-def resubmit_course(course):
-    if course.approval_status != Course.ApprovalStatus.REJECTED:
-        raise conflict('course_not_rejected', 'Ponowne zgłoszenie jest możliwe tylko dla kursu odrzuconego.')
-    course.approval_status = Course.ApprovalStatus.PENDING
-    course.save()
-    return course
+def resubmit_course(course, user, if_match):
+    version = course.versions.filter(state='rejected').first()
+    if version is None:
+        raise conflict('course_not_rejected', 'Ponowne zgłoszenie jest możliwe tylko dla wersji odrzuconej.')
+    from .version_services import transition
+    return transition(user, course.pk, version.pk, if_match, 'submit')
 
 
 def regenerate_invite_token(course):
@@ -139,7 +133,7 @@ def join_by_token(user, token):
 
 
 def _visible_to_non_student(course, *, via_token):
-    if course.approval_status != Course.ApprovalStatus.APPROVED or not course.is_active:
+    if course.current_published_version_id is None or not course.is_active:
         return False
     return course.visibility == Course.Visibility.PUBLIC or via_token
 
@@ -159,12 +153,12 @@ def _join(user, course, *, via_token):
         course = Course.objects.select_for_update().get(pk=course.pk)
 
         if not is_owner:
-            if course.approval_status != Course.ApprovalStatus.APPROVED:
+            if course.current_published_version_id is None:
                 raise not_found()
             if course.visibility == Course.Visibility.PRIVATE and not via_token:
                 raise not_found()
-        elif course.approval_status != Course.ApprovalStatus.APPROVED:
-            raise conflict('course_not_approved', 'Kurs nie został zatwierdzony.')
+        elif course.current_published_version_id is None:
+            raise conflict('course_not_approved', 'Brak opublikowanej wersji.')
 
         if not course.is_active:
             raise conflict('course_inactive', 'Kurs jest nieaktywny.')
@@ -182,6 +176,7 @@ def _join(user, course, *, via_token):
             with transaction.atomic():
                 instance = Instance.objects.create(
                     course=course,
+                    course_version_id=course.current_published_version_id,
                     student=user,
                     mentor=None if is_owner else course.owner,
                 )
@@ -223,8 +218,8 @@ def resume_instance(user, instance):
         if locked.status == Instance.Status.ACTIVE:
             raise conflict('already_active', 'Instancja jest już aktywna.')
         course = Course.objects.select_for_update().get(pk=locked.course_id)
-        if course.approval_status != Course.ApprovalStatus.APPROVED:
-            raise conflict('course_not_approved', 'Kurs nie został zatwierdzony.')
+        if course.current_published_version_id is None:
+            raise conflict('course_not_approved', 'Brak opublikowanej wersji.')
         if not course.is_active:
             raise conflict('course_inactive', 'Kurs jest nieaktywny.')
         if Instance.objects.filter(student_id=locked.student_id, status=Instance.Status.ACTIVE).exclude(

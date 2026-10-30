@@ -1,51 +1,46 @@
 from django.contrib import admin
-from django.test import TestCase
-from django.urls import reverse
+from django.test import RequestFactory
+from learning.tests.content_helpers import ContentAPICase
+from learning.tests import test_version_lifecycle as lifecycle
+from learning.models import Course, CourseVersion, CourseScope, CourseSubject
 
-from learning.models import Course
-from learning.tests.helpers import make_course, make_user
 
+class CourseAdminTests(ContentAPICase):
+    complete = lifecycle.VersionLifecycleTests.complete
 
-class CourseAdminTests(TestCase):
-    def setUp(self):
-        self.staff = make_user('admin@example.com', 'admin')
-        self.staff.is_staff = True
-        self.staff.is_superuser = True
-        self.staff.save()
-        self.client.force_login(self.staff)
-        self.owner = make_user('mentor@example.com', 'mentor')
+    def test_content_is_readonly_and_cannot_be_added_or_deleted(self):
+        request=RequestFactory().get('/admin/')
+        request.user=self.admin
+        for model,obj in [(Course,self.course),(CourseVersion,self.version)]:
+            model_admin=admin.site._registry[model]
+            self.assertFalse(model_admin.has_add_permission(request))
+            self.assertFalse(model_admin.has_delete_permission(request,obj))
+            self.assertTrue(set(f.name for f in model._meta.fields) <= set(model_admin.get_readonly_fields(request,obj)))
+        for model in [CourseScope,CourseSubject]:
+            self.assertIn('is_active',admin.site._registry[model].list_editable)
 
-    def change_course(self, course, status):
-        url = reverse('admin:learning_course_change', args=[course.pk])
-        return self.client.post(url, {
-            'owner': self.owner.pk,
-            'title': course.title,
-            'description': course.description,
-            'approval_status': status,
-            'is_active': 'on',
-        })
+    def test_admin_actions_use_same_lifecycle_and_preview_link(self):
+        self.complete()
+        self.write('post','submit/')
+        request=RequestFactory().post('/admin/')
+        request.user=self.admin
+        model_admin=admin.site._registry[CourseVersion]
+        from unittest import mock
+        with mock.patch.object(model_admin,'message_user'):
+            model_admin.accept_versions(request,CourseVersion.objects.filter(pk=self.version.pk))
+        self.version.refresh_from_db();self.course.refresh_from_db()
+        self.assertEqual(self.version.state,'published')
+        self.assertEqual(self.course.current_published_version_id,self.version.pk)
+        self.assertIn(f'/kursy/podglad/{self.course.pk}/wersje/{self.version.pk}',str(model_admin.preview_link(self.version)))
 
-    def test_course_is_registered_in_admin(self):
-        self.assertIn(Course, admin.site._registry)
-
-    def test_pending_course_can_be_approved(self):
-        course = make_course(self.owner, status=Course.ApprovalStatus.PENDING)
-        response = self.change_course(course, Course.ApprovalStatus.APPROVED)
-        self.assertEqual(response.status_code, 302)
-        course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.APPROVED)
-
-    def test_pending_course_can_be_rejected(self):
-        course = make_course(self.owner, status=Course.ApprovalStatus.PENDING)
-        response = self.change_course(course, Course.ApprovalStatus.REJECTED)
-        self.assertEqual(response.status_code, 302)
-        course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.REJECTED)
-
-    def test_approved_course_cannot_be_rejected_in_admin(self):
-        course = make_course(self.owner)
-        response = self.change_course(course, Course.ApprovalStatus.REJECTED)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('approval_status', response.context['adminform'].form.errors)
-        course.refresh_from_db()
-        self.assertEqual(course.approval_status, Course.ApprovalStatus.APPROVED)
+    def test_reject_action_and_validation_failure_do_not_publish(self):
+        self.version.state='submitted';self.version.save()
+        request=RequestFactory().post('/admin/');request.user=self.admin
+        model_admin=admin.site._registry[CourseVersion]
+        from unittest import mock
+        with mock.patch.object(model_admin,'message_user'):
+            model_admin.accept_versions(request,CourseVersion.objects.filter(pk=self.version.pk))
+        self.version.refresh_from_db();self.assertEqual(self.version.state,'submitted')
+        with mock.patch.object(model_admin,'message_user'):
+            model_admin.reject_versions(request,CourseVersion.objects.filter(pk=self.version.pk))
+        self.version.refresh_from_db();self.assertEqual(self.version.state,'rejected')

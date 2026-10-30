@@ -5,6 +5,8 @@ import {
   COURSE_PUBLIC, MENTOR, currentPath, created, fail, mockApi, ok, renderApp, resetTestEnv, sessionAs,
 } from './helpers.jsx'
 
+import { editorApi, version, manage, editorPath } from './version-fixtures.jsx'
+
 afterEach(resetTestEnv)
 
 const MINE_COURSE = { ...COURSE_PUBLIC, id: 5, title: 'Analiza danych', visibility: 'private', approval_status: 'approved', invite_token: 'tok123', owner: MENTOR.id }
@@ -87,34 +89,22 @@ describe('moje kursy mentora (AC-18)', () => {
     expect(calls.find((call) => call.method === 'PATCH').body).toEqual({ is_active: true })
   })
 
-  it('pozwala ponownie wysłać odrzucony kurs do zatwierdzenia', async () => {
-    const { calls } = mockApi({
-      ...sessionAs(MENTOR),
-      'GET /api/courses/mine/': ok([REJECTED_COURSE]),
-      'POST /api/courses/8/resubmit/': ok({ ...REJECTED_COURSE, approval_status: 'pending' }),
-    })
-    const user = userEvent.setup()
-
+  it('otwiera odrzuconą wersję do poprawy zamiast zgłaszać kurs automatycznie', async () => {
+    mockApi({...sessionAs(MENTOR), 'GET /api/courses/mine/': ok([{...REJECTED_COURSE, working_version: {...version, state:'rejected'}}])})
     renderApp('/kursy/moje')
-
-    await user.click(await screen.findByRole('button', { name: /wyślij ponownie/i }))
-
-    await waitFor(() => expect(calls.some((call) => call.method === 'POST')).toBe(true))
-    expect(await screen.findByText(/oczekuje na zatwierdzenie/i)).toBeInTheDocument()
+    expect(await screen.findByRole('link', {name:'Otwórz wersję roboczą'})).toHaveAttribute('href','/kursy/moje/8/wersje/2/edytuj')
+    expect(screen.queryByRole('button',{name:/wyślij ponownie/i})).not.toBeInTheDocument()
   })
+
 })
 
 describe('tworzenie kursu (AC-51)', () => {
-  it('blokuje zapis bez tytułu i nie wysyła żądania', async () => {
-    const { calls } = mockApi({ ...sessionAs(MENTOR) })
-    const user = userEvent.setup()
-
-    renderApp('/kursy/moje/nowy')
-
-    await user.click(await screen.findByRole('button', { name: /utwórz kurs/i }))
-
-    expect(await screen.findByText(/podaj tytuł kursu/i)).toBeInTheDocument()
-    expect(calls.some((call) => call.method === 'POST')).toBe(false)
+  it('pozwala zapisać niekompletny draft bez tytułu', async () => {
+    const {calls}=mockApi(editorApi({'POST /api/courses/':created(manage)}))
+    renderApp('/kursy/moje/nowy'); const user=userEvent.setup()
+    await user.click(await screen.findByRole('button',{name:'Utwórz kurs'}))
+    await screen.findByRole('heading',{name:'Edytor wersji'})
+    expect(calls.find(c=>c.method==='POST').body.title).toBe('')
   })
 
   it('pokazuje błąd, gdy tytuł przekracza 200 znaków', async () => {
@@ -130,42 +120,16 @@ describe('tworzenie kursu (AC-51)', () => {
     expect(calls.some((call) => call.method === 'POST')).toBe(false)
   })
 
-  it('kurs publiczny trafia do zatwierdzenia i pokazuje status oczekiwania', async () => {
-    const { calls } = mockApi({
-      ...sessionAs(MENTOR),
-      'POST /api/courses/': created(PENDING_COURSE),
-    })
-    const user = userEvent.setup()
-
-    renderApp('/kursy/moje/nowy')
-
-    await user.type(await screen.findByLabelText(/tytuł kursu/i), 'Kurs czekający')
-    await user.selectOptions(screen.getByLabelText(/typ kursu/i), 'public')
-    await user.click(screen.getByRole('button', { name: /utwórz kurs/i }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent(/oczekuje na zatwierdzenie/i)
-    expect(calls.find((call) => call.method === 'POST').body).toEqual(
-      expect.objectContaining({ title: 'Kurs czekający', visibility: 'public' }),
-    )
-  })
-
-  it('kurs prywatny przechodzi od razu do szczegółów mentora', async () => {
-    mockApi({
-      ...sessionAs(MENTOR),
-      'POST /api/courses/': created(MINE_COURSE),
-      'GET /api/courses/mine/5/': ok(MINE_COURSE),
-      'GET /api/courses/mine/5/students-count/': ok({ count: 0 }),
-      'GET /api/instances/': ok([]),
-    })
-    const user = userEvent.setup()
-
-    renderApp('/kursy/moje/nowy')
-
-    await user.type(await screen.findByLabelText(/tytuł kursu/i), 'Analiza danych')
-    await user.selectOptions(screen.getByLabelText(/typ kursu/i), 'private')
-    await user.click(screen.getByRole('button', { name: /utwórz kurs/i }))
-
-    await waitFor(() => expect(currentPath()).toBe('/kursy/moje/5'))
+  it.each(['public','private'])('kurs %s otwiera edytor draftu bez automatycznego zgłoszenia', async visibility => {
+    const {calls}=mockApi(editorApi({'POST /api/courses/':created({...manage,visibility})}))
+    const user=userEvent.setup();renderApp('/kursy/moje/nowy')
+    await user.type(await screen.findByLabelText(/tytuł kursu/i),'Nowy kurs')
+    await user.selectOptions(screen.getByLabelText(/typ kursu/i),visibility)
+    await user.click(screen.getByRole('button',{name:'Utwórz kurs'}))
+    await screen.findByRole('heading',{name:'Edytor wersji'})
+    expect(currentPath()).toBe(editorPath)
+    expect(calls.find(c=>c.method==='POST').body).toMatchObject({title:'Nowy kurs',visibility})
+    expect(screen.queryByText(/oczekuje na zatwierdzenie/i)).not.toBeInTheDocument()
   })
 
   it('administrator może tworzyć tylko kursy publiczne', async () => {
@@ -312,25 +276,13 @@ describe('szczegóły kursu mentora (AC-22, AC-50)', () => {
     expect(await screen.findByDisplayValue(/new456/)).toBeInTheDocument()
   })
 
-  it('zapis zmian w zatwierdzonym kursie publicznym uprzedza o ponownym zatwierdzeniu (B1)', async () => {
-    const PUBLIC_MINE = { ...MINE_COURSE, visibility: 'public', invite_token: null }
-    const { calls } = setup({
-      'GET /api/courses/mine/5/': ok(PUBLIC_MINE),
-      'PATCH /api/courses/5/': ok({ ...PUBLIC_MINE, title: 'Nowy tytuł', approval_status: 'pending' }),
-    })
-    const user = userEvent.setup()
-
-    renderApp('/kursy/moje/5')
-
-    expect(await screen.findByText(/wymaga ponownego zatwierdzenia/i)).toBeInTheDocument()
-    const title = screen.getByLabelText(/tytuł kursu/i)
-    await user.clear(title)
-    await user.type(title, 'Nowy tytuł')
-    await user.click(screen.getByRole('button', { name: /zapisz zmiany/i }))
-
-    await waitFor(() => expect(calls.some((call) => call.method === 'PATCH' && call.path === '/api/courses/5/')).toBe(true))
-    expect(calls.find((call) => call.method === 'PATCH').body).toEqual(expect.objectContaining({ title: 'Nowy tytuł' }))
-    expect(await screen.findByText(/oczekuje na zatwierdzenie/i)).toBeInTheDocument()
+  it('edycja publikacji tworzy osobny draft i nie zmienia tożsamości kursu', async () => {
+    const PUBLIC_MINE={...MINE_COURSE,visibility:'public',current_published_version:1,working_version:null}
+    const {calls}=setup({'GET /api/courses/mine/5/':ok(PUBLIC_MINE),'POST /api/courses/5/versions/':created(version)})
+    const user=userEvent.setup();renderApp('/kursy/moje/5')
+    await user.click(await screen.findByRole('button',{name:'Utwórz nową wersję'}))
+    await waitFor(()=>expect(currentPath()).toBe('/kursy/moje/5/wersje/2/edytuj'))
+    expect(calls.some(c=>c.method==='PATCH'&&c.path==='/api/courses/5/')).toBe(false)
   })
 
   it('pokazuje link zaproszenia tylko do odczytu', async () => {

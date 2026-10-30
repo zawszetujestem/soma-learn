@@ -14,7 +14,7 @@ class InstancesApiTests(TestCase):
         self.student = make_user('student@example.com', 'student')
         self.stranger = make_user('stranger@example.com', 'student')
         self.course = make_course(self.mentor)
-        self.instance = Instance.objects.create(course=self.course, student=self.student, mentor=self.mentor)
+        self.instance = Instance.objects.create(course=self.course, course_version=self.course.versions.first(), student=self.student, mentor=self.mentor)
         self.task_a = self.instance.tasks.create(title='A', hours=Decimal('1.00'))
         self.task_b = self.instance.tasks.create(title='B', hours=Decimal('1.00'))
         self.client = APIClient()
@@ -58,7 +58,7 @@ class InstancesApiTests(TestCase):
 
     def test_student_without_mentor_updates_task_status_and_progress(self):
         solo_course = make_course(self.mentor, title='Solo')
-        solo = Instance.objects.create(course=solo_course, student=self.stranger, mentor=None)
+        solo = Instance.objects.create(course=solo_course, course_version=solo_course.versions.first(), student=self.stranger, mentor=None)
         t1 = solo.tasks.create(title='X', hours=Decimal('1.00'))
         solo.tasks.create(title='Y', hours=Decimal('1.00'))
         self.as_user(self.stranger)

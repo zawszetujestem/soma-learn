@@ -39,17 +39,19 @@ Frontend korzysta z React 19, Vite 8 i React Router 7. Testy są oparte na Vites
 
 ## Trasy i zakres
 
-- `/` — strona główna wyjaśniająca SOMA, z sekcjami dla ucznia, rodzica i mentora. Pierwszą grupą są ósmoklasiści; maturzyści są planowani później.
-- `/kursy` — lista kursów publicznych, zatwierdzonych i aktywnych, szczegóły kursu i dołączanie; wymaga zalogowania.
-- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link i instancja ucznia.
-- `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — kursy mentora (wymagana rola mentor lub admin): lista, nowy kurs, zarządzanie kursem.
-- Pełny opis tras i endpointów: `../DOC/BACKEND.md`.
-- `/logowanie` — logowanie e-mailem i hasłem, standardowo potem 6-cyfrowy kod z allauth (`/_allauth/browser/v1/`). Ważne zaufanie przeglądarki pozwala pominąć etap kodu, ale nie hasło; po pełnym uwierzytelnieniu token DRF jest wymieniany przez `/api/auth/token/exchange/` i zapisywany w `sessionStorage`. Logowanie Google jest dostępne tylko dla zweryfikowanych kont. Ponowne wysłanie kodu ma 60 s cooldown, nie resetuje czasu wygaśnięcia (kod ważny 10 min) i po wygaśnięciu jest zablokowane.
-- `/logowanie/reset-hasla` — reset hasła kodem: e-mail → 6-cyfrowy kod z e-maila → nowe hasło (allauth Headless `auth/password/...`). Link „Nie pamiętasz hasła?” znajduje się na etapie hasła w `/logowanie`.
-- Pola hasła (logowanie, rejestracja, nowe hasło) mają przycisk „Pokaż/Ukryj” (`aria-pressed`, nie wysyła formularza); przy wysłaniu formularza hasło jest ponownie maskowane. Pola mają `autocomplete` `username` + `current-password`/`new-password`, a etap nowego hasła zawiera ukryte pole `username` z e-mailem, aby menedżer haseł przeglądarki podpowiadał i zapisywał dane logowania.
-- Zalogowany użytkownik (token DRF w `sessionStorage`) nie widzi `/logowanie` ani `/logowanie/reset-hasla` — jest przekierowany na `/kursy`. W nagłówku zamiast „Logowanie” pokazuje się „Wyloguj”, który żąda zakończenia sesji allauth i cofnięcia zaufania (`DELETE /_allauth/browser/v1/auth/session`), czyści lokalny token i wraca na `/`. Przy niepotwierdzonym wylogowaniu pokazuje ostrzeżenie z możliwością ponowienia.
+- `/` — strona główna wyjaśniająca SOMA; pierwszą grupą są ósmoklasiści.
+- `/kursy` — katalog wyłącznie opublikowanych, aktywnych kursów publicznych; wymaga logowania. Mentor/admin widzi „Utwórz nowy” i „Moje kursy”.
+- `/kursy/{id}` — szczegóły kursu i dołączanie.
+- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja ucznia z treścią wersji przypiętej przy dołączeniu.
+- `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — lista kursów mentora/admina, utworzenie kursu z wersją 1 w stanie roboczym oraz zarządzanie kursami/planem godzinowym.
+- `/kursy/moje/{id}/wersje/{versionId}/edytuj` — edycja wersji roboczej lub odrzuconej; zapis korzysta z ETag/`If-Match`.
+- `/kursy/podglad/{id}/wersje/{versionId}` — podgląd SPA dla mentora/admina, w tym przełącznik pełnego podglądu i „Oczami ucznia”; moderator może zaakceptować/odrzucić zgłoszenie.
+- `/course-moderation/` — kolejka moderacji administratora.
+- Pełny opis modeli, lifecycle, endpointów, kodów błędów, migracji i storage: `../DOC/BACKEND.md`.
 
-Dołączanie przez link z tokenem jest zaimplementowane. Zaproszenia imienne przez mentora są opisane jako planowane, ale nie są zaimplementowane.
+Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować kurs prywatny albo zgłosić publiczny do moderacji; edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji.
+
+Pliki kursu są przechowywane prywatnie i dostępne wyłącznie przez uwierzytelnione API. Limity: PDF ≤20 MB, JPG/PNG/WebP ≤5 MB, maksymalnie 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). Markdown teorii jest renderowany przez `react-markdown` z wyłączonym surowym HTML i walidacją linków. Podgląd ucznia nie ujawnia kluczy odpowiedzi ani poprawności opcji testowych. W v1 nie ma rozwiązywania/oceniania testów, a wymagania wstępne mają charakter informacyjny.
 
 ### Zaufana przeglądarka i wylogowanie
 
@@ -70,7 +72,13 @@ Końcowe QA prototypu nie wykazało blockerów. `npm test` zakończył się wyni
 
 Ręczna inspekcja w Chrome/CDP objęła bezpośrednie otwarcie tras oraz emulowane viewporty 320×844 i 390×844. Na stronie głównej `document.scrollWidth` odpowiadał szerokości viewportu; na `/kursy` i `/logowanie` przy 390×844 wynosił 390 px. Zrzuty ekranu desktop i mobile zostały obejrzane wizualnie. Kontrasty wskazane podczas QA zostały poprawione.
 
-Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG. Powyższa inspekcja responsywności dotyczy prototypu informacyjnego; widoki kursów nie mają zakończonej weryfikacji responsywności (AC-53).
+Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG. Powyższa inspekcja responsywności dotyczy prototypu informacyjnego; QA nie zweryfikowało manualnie responsywności J6 widoków kursów w pełnej przeglądarce.
+
+### Kursy wersjonowane — QA 30.10.2026
+
+Backend SQLite: 316 OK, 8 skip; PostgreSQL: 316/316 OK. `makemigrations --check` nie wykazał zmian, `manage.py check` zwrócił 0 issues. Frontend: 230 passed, 1 skip; build i smoke API OK. Niezależne QA: **POZYTYWNY**. Niestabilny test `join-by-token` (wyścig mocka POST, `finish is not a function`) ustabilizowano synchronizacją w teście; 30/30 przebiegów OK. QA nie zweryfikowało ręcznie responsywności J6 w pełnej przeglądarce.
+
+Walidacja typu i zawartości pliku nie jest skanowaniem antywirusowym. Szczegóły ograniczeń i API: [BACKEND.md](../DOC/BACKEND.md).
 
 ### Zaufana przeglądarka — QA 30.10.2026
 

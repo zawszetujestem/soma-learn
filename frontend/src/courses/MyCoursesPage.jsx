@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { VersionManagementLinks } from './VersionLifecycle.jsx'
+import { stateLabels } from './EditorParts.jsx'
 import { coursesApi } from './api.js'
 import { approvalLabels, visibilityLabels } from './format.js'
 import { useLoader } from './RequireAuth.jsx'
@@ -40,19 +42,15 @@ export default function MyCoursesPage() {
           {courses.data.map((course) => (
             <li key={course.id}>
               <article className="course-card">
-                <h2><Link to={`/kursy/moje/${course.id}`}>{course.title}</Link></h2>
+                <h2><Link to={`/kursy/moje/${course.id}`}>{course.working_version?.title || course.current_published_version?.title || course.title || 'Kurs bez tytułu'}</Link></h2>
                 <p className="course-meta">
                   <span>{visibilityLabels[course.visibility]}</span>
                   {' · '}
-                  <span>{approvalLabels[course.approval_status]}</span>
+                  <span>{stateLabels[course.working_version?.state] || (course.current_published_version ? 'Opublikowana' : approvalLabels[course.approval_status])}</span>
                   {!course.is_active && <span className="badge badge-muted">nieaktywny</span>}
                 </p>
+                <VersionManagementLinks course={course} onError={setActionError} />
                 <div className="course-actions">
-                  {course.approval_status === 'rejected' && (
-                    <button type="button" className="button button-secondary" onClick={() => runAction(course, (item) => coursesApi.resubmitCourse(item.id))}>
-                      Wyślij ponownie
-                    </button>
-                  )}
                   {course.is_active && (
                     <button type="button" className="button button-secondary" onClick={() => runAction(course, (item) => coursesApi.updateCourse(item.id, { is_active: false }))}>
                       Dezaktywuj

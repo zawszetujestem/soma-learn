@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { VersionManagementLinks } from './VersionLifecycle.jsx'
+import { stateLabels } from './EditorParts.jsx'
 import { coursesApi } from './api.js'
 import { approvalLabels, formatHours, formatPercent, instanceStatusLabels, visibilityLabels } from './format.js'
 import { useCurrentUser, useLoader } from './RequireAuth.jsx'
@@ -47,7 +49,7 @@ export default function MentorCourseDetailPage() {
     if (detail.error.kind === 'notFound') {
       return (
         <main className="courses-page page-width">
-          <p className="courses-empty">Nie znaleziono kursu.</p>
+          <p className="courses-empty">Nie znaleziono kursu.</p><ErrorMessage>{detail.error.message}</ErrorMessage>
           <Link className="text-link" to="/kursy/moje">Wróć do moich kursów</Link>
         </main>
       )
@@ -116,10 +118,10 @@ function CourseManagement({ courseId, data, setData }) {
     <main className="courses-page page-width">
       <header className="courses-header">
         <p className="eyebrow">
-          {visibilityLabels[course.visibility]} · {approvalLabels[course.approval_status]}
+          {visibilityLabels[course.visibility]} · {stateLabels[course.working_version?.state] || (course.current_published_version ? 'Opublikowana' : approvalLabels[course.approval_status])}
           {!course.is_active && ' · nieaktywny'}
         </p>
-        <h1>{course.title}</h1>
+        <h1>{course.working_version?.title || course.current_published_version?.title || course.title || 'Kurs bez tytułu'}</h1>
         <div className="course-actions">
           <button type="button" className="button button-secondary" disabled={busy} onClick={() => patchCourse({ is_active: !course.is_active })}>
             {course.is_active ? 'Dezaktywuj' : 'Reaktywuj'}
@@ -129,7 +131,7 @@ function CourseManagement({ courseId, data, setData }) {
 
       {error && <p className="courses-error" role="alert">{error}</p>}
 
-      <CourseEditForm course={course} busy={busy} onSave={patchCourse} />
+      <VersionManagementLinks course={course} onError={setError} />
 
       {course.visibility === 'private' && course.invite_token && (
         <InviteLink
@@ -183,40 +185,6 @@ function CourseManagement({ courseId, data, setData }) {
         </ul>
       </section>
     </main>
-  )
-}
-
-function CourseEditForm({ course, busy, onSave }) {
-  const [title, setTitle] = useState(course.title)
-  const [description, setDescription] = useState(course.description ?? '')
-  const publicApproved = course.visibility === 'public' && course.approval_status === 'approved'
-
-  return (
-    <section className="course-section" aria-labelledby="course-edit-title">
-      <h2 id="course-edit-title">Dane kursu</h2>
-      {publicApproved && (
-        <p className="courses-banner">
-          Zmiana treści zatwierdzonego kursu publicznego wymaga ponownego zatwierdzenia.
-        </p>
-      )}
-      <form
-        className="course-form"
-        onSubmit={(event) => {
-          event.preventDefault()
-          onSave({ title: title.trim(), description: description.trim() })
-        }}
-      >
-        <div className="field">
-          <label htmlFor="edit-title">Tytuł kursu</label>
-          <input id="edit-title" type="text" value={title} onChange={(event) => setTitle(event.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="edit-description">Opis</label>
-          <textarea id="edit-description" rows={3} value={description} onChange={(event) => setDescription(event.target.value)} />
-        </div>
-        <button type="submit" className="button button-secondary" disabled={busy}>Zapisz zmiany</button>
-      </form>
-    </section>
   )
 }
 

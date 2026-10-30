@@ -58,7 +58,7 @@ describe('instancja ucznia (AC-49)', () => {
     const { calls } = mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok(INSTANCE_OWN),
-      'GET /api/courses/2/': ok(COURSE_OPEN),
+      'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
       'PATCH /api/instances/11/tasks/4/': ok({ id: 4, title: 'Join', hours: '2.00', status: 'in_progress', position: 2 }),
     })
     const user = userEvent.setup()
@@ -77,7 +77,7 @@ describe('instancja ucznia (AC-49)', () => {
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok({ ...INSTANCE_OWN, mentor: MENTOR.id }),
-      'GET /api/courses/2/': ok(COURSE_OPEN),
+      'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
     })
 
     renderApp('/kursy/instancje/11')
@@ -91,7 +91,7 @@ describe('instancja ucznia (AC-49)', () => {
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok({ ...INSTANCE_OWN, status: 'closed', closed_at: '2026-01-05T10:00:00Z' }),
-      'GET /api/courses/2/': ok(COURSE_OPEN),
+      'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
     })
 
     renderApp('/kursy/instancje/11')
@@ -105,7 +105,7 @@ describe('instancja ucznia (AC-49)', () => {
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok(INSTANCE_OWN),
-      'GET /api/courses/2/': ok(COURSE_OPEN),
+      'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
       'PATCH /api/instances/11/tasks/4/': fail(409, { code: 'instance_closed', detail: 'Instancja jest zamknięta.' }),
     })
     const user = userEvent.setup()

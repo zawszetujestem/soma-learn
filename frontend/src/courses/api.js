@@ -20,6 +20,7 @@ const conflictMessages = {
 }
 
 export function courseErrorMessage(status, payload = {}) {
+  if (typeof payload.message === 'string' && payload.message.trim()) return payload.message
   if (payload.code && conflictMessages[payload.code]) return conflictMessages[payload.code]
   if (status === 401) return 'Sesja wygasła. Zaloguj się ponownie.'
   if (status === 403 || payload.code === 'forbidden') return 'Nie masz uprawnień do tej operacji.'
@@ -30,12 +31,13 @@ export function courseErrorMessage(status, payload = {}) {
 }
 
 export class CourseApiError extends Error {
-  constructor({ kind, status = 0, code, message }) {
+  constructor({ kind, status = 0, code, message, payload }) {
     super(message)
     this.name = 'CourseApiError'
     this.kind = kind
     this.status = status
     this.code = code
+    this.payload = payload
   }
 }
 
@@ -48,27 +50,41 @@ function kindForStatus(status) {
   return 'validation'
 }
 
-async function request(method, url, body) {
+export async function request(method, url, body, options = {}) {
   const headers = { Accept: 'application/json', Authorization: `Token ${getToken()}` }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const multipart = body instanceof FormData
+  if (body !== undefined && !multipart) headers['Content-Type'] = 'application/json'
+  if (options.etag) headers['If-Match'] = options.etag
 
   let response
   try {
     response = await fetch(url, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     })
   } catch {
     throw new CourseApiError({ kind: 'network', message: connectionError })
   }
 
-  const payload = response.status === 204 ? {} : await response.json().catch(() => ({}))
+  const etag = response.headers?.get('ETag')
+  if (response.ok && etag && options.onEtag) options.onEtag(etag)
+  if (response.ok && options.blob) {
+    try { return await response.blob() } catch { throw new CourseApiError({kind:'network',message:connectionError}) }
+  }
+  let payload = {}
+  if (response.status !== 204) {
+    try { payload = (await response.json()) ?? {} }
+    catch {
+      if (response.ok) throw new CourseApiError({kind:'network',message:'Nie udało się odczytać odpowiedzi serwera. Spróbuj ponownie.'})
+    }
+  }
   if (!response.ok) {
     throw new CourseApiError({
       kind: kindForStatus(response.status),
       status: response.status,
       code: payload.code,
+      payload,
       message: courseErrorMessage(response.status, payload),
     })
   }
@@ -88,7 +104,6 @@ export const coursesApi = {
   studentsCount: async (id) => (await get(`/api/courses/mine/${id}/students-count/`)).count,
   createCourse: (data) => post('/api/courses/', data),
   updateCourse: (id, data) => patch(`/api/courses/${id}/`, data),
-  resubmitCourse: (id) => post(`/api/courses/${id}/resubmit/`),
   regenerateToken: (id) => post(`/api/courses/${id}/regenerate-token/`),
   joinCourse: (id) => post(`/api/courses/${id}/join/`),
   joinByToken: (token) => post(`/api/courses/join/${encodeURIComponent(token)}/`),
@@ -99,4 +114,31 @@ export const coursesApi = {
   updateInstanceTask: (id, taskId, status) => patch(`/api/instances/${id}/tasks/${taskId}/`, { status }),
   closeInstance: (id) => post(`/api/instances/${id}/close/`),
   resumeInstance: (id) => post(`/api/instances/${id}/resume/`),
+}
+
+// ETags are opaque server values; never reconstruct them from revision fields.
+const tags = new Map()
+const versionUrl = (c, v) => `/api/courses/${c}/versions/${v}/`
+function versionRequest(c, v, suffix, method = 'GET', body, blob = false) {
+  const key = `${getToken()}/${c}/${v}`
+  return request(method, versionUrl(c, v) + suffix, body, {
+    etag: method === 'GET' ? undefined : tags.get(key),
+    onEtag: blob ? undefined : tag => tags.set(key, tag), blob,
+  })
+}
+export const contentApi = {
+  version: (c,v) => versionRequest(c,v,''),
+  save: (c,v,data) => versionRequest(c,v,'','PATCH',data),
+  mutate: (c,v,path,method='POST',data) => versionRequest(c,v,path,method,method==='DELETE'?undefined:(data ?? {})),
+  validation: (c,v) => versionRequest(c,v,'validation/'),
+  preview: (c,v) => versionRequest(c,v,'student-preview/'),
+  upload: (c,v,file) => {const data=new FormData(); data.append('file',file); return versionRequest(c,v,'assets/','POST',data)},
+  download: (c,v,a) => versionRequest(c,v,`assets/${a}/download/`,'GET',undefined,true),
+  assets: c => get(`/api/courses/${c}/assets/`),
+  deleteAsset: (c,a) => request('DELETE',`/api/courses/${c}/assets/${a}/`),
+  scopes: () => get('/api/course-scopes/'),
+  subjects: () => get('/api/course-subjects/'),
+  createVersion: c => post(`/api/courses/${c}/versions/`,{}),
+  moderation: () => get('/api/course-moderation/'),
+  instanceContent: i => get(`/api/instances/${i}/content/`),
 }

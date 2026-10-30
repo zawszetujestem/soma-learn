@@ -37,7 +37,7 @@ class JoinApiTests(TestCase):
 
     def test_second_active_course_gives_slot_taken(self):
         other = make_course(self.mentor, title='Drugi')
-        Instance.objects.create(course=other, student=self.student, mentor=self.mentor)
+        Instance.objects.create(course=other, course_version=other.versions.first(), student=self.student, mentor=self.mentor)
         self.as_user(self.student)
         response = self.client.post(f'/api/courses/{self.course.pk}/join/')
         self.assertEqual(response.status_code, 409)

@@ -29,18 +29,20 @@ export function mockApi(handlers) {
     calls.push({
       method,
       path,
-      body: options.body ? JSON.parse(options.body) : undefined,
+      body: options.body instanceof FormData ? options.body : options.body ? JSON.parse(options.body) : undefined,
       headers: options.headers || {},
     })
     const key = `${method} ${path}`
     const handler = handlers[key]
     if (!handler) throw new Error(`Unexpected request ${key}`)
     const result = typeof handler === 'function' ? await handler(options) : handler
-    const { status = 200, body = {} } = result
+    const { status = 200, body = {}, headers = {} } = result
     return {
       ok: status >= 200 && status < 300,
       status,
       json: async () => body,
+      headers: new Headers(headers),
+      blob: async () => body,
     }
   })
   vi.stubGlobal('fetch', fetchMock)

@@ -57,12 +57,13 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG
 - Instrukcje uruchomienia i testów: `../frontend/README.md`
 
-### Kursy, zadania i instancje (✅ zaimplementowane, aktualizacja 30.10.2026)
-- Backend: modele Course, CourseTask, Instance, InstanceTask, InstancePeriod; zatwierdzanie kursów w Django admin; limit jednej aktywnej instancji na ucznia; kopia zadań przy dołączeniu; zamykanie i wznawianie instancji; licznik aktywnych uczniów mentora; postęp w procentach.
-- Frontend: lista kursów, szczegóły, dołączanie (także przez link z tokenem), widok instancji ucznia, zarządzanie kursami mentora i formularz nowego kursu.
-- Zakres, endpointy i kody błędów: `BACKEND.md`; trasy: `BACKEND.md` i `../frontend/README.md`.
-- Nie zadeklarowano zaliczenia testów responsywności widoków kursów (AC-53); wymagają osobnej weryfikacji.
-- Zaproszenia imienne przez mentora pozostają planowane.
+### Kursy — tworzenie przez mentora i wersjonowanie (✅ zaimplementowane, 30.10.2026)
+- Kurs ma trwałą tożsamość oddzieloną od wersji treści. Tworzenie rozpoczyna wersję 1 jako roboczą; mentor publikuje kurs prywatny lub zgłasza publiczny do moderacji. Administrator moderuje zgłoszenia przez API i akcje Django admin. Edycja wersji nie powoduje automatycznej reweryfikacji; publikacja jest jawnym przejściem lifecycle.
+- Treść obejmuje klasyfikację Zakres/Przedmiot, hierarchię Dział→Temat→Lekcja, materiały teorii/praktyki, testy i informacyjne wymagania wstępne. Katalog pokazuje wyłącznie drzewo programu, bez materiałów i testów. Instancja ucznia zachowuje przypiętą wersję; CourseTask i plan godzinowy pozostają niezależne od wersji.
+- Załączniki są prywatne, pobierane przez API, z limitami PDF 20 MB, obrazów 5 MB, 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). `approval_status`, `title` i `description` na Course są polami archiwalnymi.
+- Wyniki weryfikacji: backend SQLite 316 OK/8 skip, PostgreSQL 316/316 OK, `makemigrations --check` bez zmian, `manage.py check` 0 issues; frontend 230 passed/1 skip, build i smoke API OK; niezależne QA POZYTYWNY.
+- Ograniczenia: brak rozwiązywania/oceniania testów, wymagania wstępne nie są egzekwowane, walidacja plików nie jest antywirusem. QA nie zweryfikowało manualnie responsywności J6 w pełnej przeglądarce. Niestabilny test frontendowy `join-by-token` ustabilizowano synchronizacją w teście (30/30 OK).
+- Szczegóły modeli, lifecycle, endpointów, błędów, migracji i storage: [BACKEND.md](BACKEND.md#kursy-zadania-i-instancje); trasy i uruchomienie funkcji: [frontend/README.md](../frontend/README.md#trasy-i-zakres).
 
 ### Zaufana przeglądarka (✅ zaimplementowane, QA PASS 30.10.2026)
 - Opcjonalne pomijanie OTP przez 24 godziny od poprawnego kodu; zgoda na etapie kodu, domyślnie wyłączona. Email i hasło nadal wymagane przy nowym logowaniu; użycie nie odnawia TTL ani nie przedłuża sesji.
