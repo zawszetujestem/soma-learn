@@ -123,9 +123,10 @@ class HierarchyAPITests(ContentAPICase):
             self.write('patch', data={'scope_id': scope.pk}).data['scope']['id'],
             scope.pk,
         )
-        self.assertEqual(
-            [x['id'] for x in self.client.get('/api/course-scopes/').data], [scope.pk]
-        )
+        listed = [x['id'] for x in self.client.get('/api/course-scopes/').data]
+        self.assertIn(scope.pk, listed)
+        self.assertNotIn(inactive.pk, listed)
+        self.assertEqual(set(listed), set(CourseScope.objects.filter(is_active=True).values_list('pk', flat=True)))
         self.assertEqual(self.client.get(self.url + 'validation/').status_code, 200)
         self.assertFalse(self.client.get(self.url + 'validation/').data['valid'])
         self.error(
