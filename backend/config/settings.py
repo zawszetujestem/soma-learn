@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
     'allauth.headless',
     'users',
+    'learning',
 ]
 
 MIDDLEWARE = [
@@ -152,11 +153,16 @@ ACCOUNT_LOGIN_BY_CODE_MAX_ATTEMPTS = 5
 ACCOUNT_LOGIN_BY_CODE_SUPPORTS_RESEND = 1
 ACCOUNT_LOGIN_BY_CODE_FORMAT = {'numeric': True, 'length': 6, 'dashed': False}
 ALLAUTH_USER_CODE_FORMAT = {'numeric': True, 'length': 6, 'dashed': False}
+ACCOUNT_PASSWORD_RESET_BY_CODE_ENABLED = True
+PASSWORD_RESET_BY_CODE_TIMEOUT = 600
+PASSWORD_RESET_BY_CODE_MAX_ATTEMPTS = 5
 ACCOUNT_RATE_LIMITS = {
     'login': '30/15m/ip',
     'login_failed': '30/15m/ip,10/15m/key',
     'login_code_send': '20/h/ip,5/h/key',
     'login_code_resend': '1/60s/key',
+    'reset_password': '20/h/ip,5/h/key',
+    'reset_password_from_key': '20/h/ip',
     'signup': '20/h/ip',
     'confirm_email': '1/60s/key,20/h/ip',
 }
@@ -165,6 +171,7 @@ HEADLESS_CLIENTS = ('browser',)
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 HEADLESS_FRONTEND_URLS = {
     'account_confirm_email': f'{FRONTEND_BASE_URL}/potwierdzenie-email/{{key}}',
+    'account_signup': f'{FRONTEND_BASE_URL}/rejestracja',
     'socialaccount_login_error': f'{FRONTEND_BASE_URL}/logowanie/google/callback',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = False
@@ -216,6 +223,12 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API dokumentacja dla platformy edukacyjnej SOMA Learn',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'InstanceTaskStatusEnum': [
+            ('todo', 'Do zrobienia'), ('in_progress', 'W trakcie'), ('done', 'Zrobione'),
+        ],
+        'InstanceStatusEnum': [('active', 'Aktywna'), ('closed', 'Zamknięta')],
+    },
 }
 
 EMAIL_BACKEND = os.getenv(

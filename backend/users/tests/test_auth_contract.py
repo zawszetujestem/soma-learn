@@ -442,8 +442,6 @@ class ExistingDrfTokenRegressionTests(TestCase):
 
 class HeadlessEndpointRestrictionTests(TestCase):
     BLOCKED = (
-        ('post', '/auth/password/request'),
-        ('post', '/auth/password/reset'),
         ('post', '/auth/reauthenticate'),
         ('post', '/account/password/change'),
         ('post', '/account/email'),
