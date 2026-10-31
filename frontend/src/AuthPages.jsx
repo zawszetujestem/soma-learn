@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, postJson, responseError } from './authApi.js'
+import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, logout, postJson, responseError } from './authApi.js'
 import { clearToken } from './courses/api.js'
 
 function AuthLayout({ title, children }) {
@@ -343,6 +343,7 @@ export function LoginPage() {
     setBusy(true)
     setError('')
     let finishing = stage === 'exchange'
+    let recoveringSession = false
     const finish = () => {
       finishing = true
       return finishLogin()
@@ -351,16 +352,30 @@ export function LoginPage() {
       if (stage === 'exchange') {
         await finish()
       } else if (stage === 'password') {
-        const { response, payload } = await postJson('/_allauth/browser/v1/auth/login', {
-          email: form.get('email'), password: form.get('password'),
-        })
+        const credentials = { email: form.get('email'), password: form.get('password') }
+        let { response, payload } = await postJson('/_allauth/browser/v1/auth/login', credentials)
+        if (response.status === 409) {
+          recoveringSession = true
+          // A cookie session may outlive this tab's DRF token. Authenticate the
+          // submitted account, rather than exchanging the previous account's session.
+          const session = await getJson('/_allauth/browser/v1/auth/session')
+          if (![200, 401].includes(session.response.status)) {
+            setError(responseError(session.response, session.payload))
+            return
+          }
+          if (session.response.status === 200 && session.payload.meta?.is_authenticated === true) {
+            await logout()
+            const retry = await postJson('/_allauth/browser/v1/auth/login', credentials)
+            response = retry.response
+            payload = retry.payload
+          }
+          recoveringSession = false
+        }
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
         } else if (response.status === 200 && payload.meta?.is_authenticated === true && !payload.errors?.length) {
           // Trusted browser: the backend skipped OTP after a correct password.
-          await finish()
-        } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
           await finish()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
@@ -380,7 +395,9 @@ export function LoginPage() {
         }
       }
     } catch (failure) {
-      setError(stage === 'code' || finishing
+      setError(recoveringSession
+        ? failure.message === 'Failed to fetch' ? connectionError : failure.message
+        : stage === 'code' || finishing
         ? failure.message === 'Failed to fetch' ? connectionError : 'Nie udało się dokończyć logowania. Spróbuj ponownie.'
         : connectionError)
     } finally {

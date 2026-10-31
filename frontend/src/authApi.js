@@ -54,7 +54,8 @@ const fieldNames = {
 export function responseError(response, payload) {
   if (response.status === 429) return 'Zbyt wiele prób. Odczekaj chwilę i spróbuj ponownie.'
   if (response.status >= 500) return 'Błąd serwera. Spróbuj ponownie później.'
-  if (response.status === 409) return 'Sesja logowania uległa zmianie. Zaloguj się ponownie.'
+  if (response.status === 409) return typeof payload.message === 'string' && payload.message.trim()
+    ? payload.message : 'Sesja logowania uległa zmianie. Zaloguj się ponownie.'
   if (payload.errors?.some((error) => error.code === 'invalid_or_expired_key')) {
     return 'Link potwierdzenia jest nieprawidłowy lub wygasł.'
   }

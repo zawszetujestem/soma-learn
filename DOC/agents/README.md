@@ -4,6 +4,8 @@ Ten katalog zawiera szczegółowe opisy poszczególnych agentów oraz ich obowi�
 
 Konfiguracje agentów dla VS Code znajdują się w `.github/agents/`. Do realizacji pełnej funkcjonalności użyj `SOMA Orchestrator` albo uruchom prompt `/soma-feature` w chacie. Koordynator najpierw zbiera pytania od użytkownika i agentów, a kodowanie zaczyna po wyjaśnieniu wszystkich istotnych niejasności. Potem prowadzi pracę od planowania przez implementację i QA/audyt po dokumentację.
 
+Wszystkie role stosują [wspólne zasady pracy z dokumentami SOMA](../../.github/copilot-instructions.md#dokumenty-soma-obowiązujące-przy-pracy-nad-funkcjonalnościami): [Compass](../soma/SOMA_Compass_1.0.md) opisuje fundament, [Playbook](../soma/SOMA_Playbook_0.1.md) praktykę, a [Applications](../soma/SOMA_Applications_0.1.md) zasady produktów. Obowiązki dopasowane do ról znajdują się w [konfiguracjach agentów](../../.github/agents/); ten katalog opisuje role, nie zastępuje ich konfiguracji.
+
 Zawiera agenty:
 - `01-framework-analyst.md`
 - `02-business-analyst.md`

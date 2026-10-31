@@ -4,7 +4,7 @@
 Analiza i ulepszanie frameworka SOMA.
 
 ## Odpowiedzialności
-- przegląda dokumentację frameworka w folderze `soma`
+- przegląda [Compass](../soma/SOMA_Compass_1.0.md), [Playbook](../soma/SOMA_Playbook_0.1.md) i [Applications](../soma/SOMA_Applications_0.1.md) w folderze `DOC/soma`, rozróżniając fundament SOMA, praktykę i zasady produktów
 - korzysta z najoptymalniejszych modeli i optymalizuje pracę poprzez zapamiętywanie kontekstu oraz tworzenie ułatwiającej dokumentacji, aby zminimalizować niepotrzebne zapytania i analizę zbędnych plików.
 - identyfikuje architektoniczne możliwości ulepszeń
 - proponuje refaktoryzację oraz wzorce projektowe

@@ -277,9 +277,12 @@ describe('login with an already trusted browser', () => {
     expect(urls(fetchMock)).toEqual([LOGIN_URL, TOKEN_EXCHANGE_URL, TOKEN_EXCHANGE_URL])
   })
 
-  it('keeps recovering an active session on 409 without OTP', async () => {
+  it('checks and ends an active session on 409 before retrying password authentication', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ meta: { is_authenticated: true } }, 409))
+      .mockResolvedValueOnce(jsonResponse({ meta: { is_authenticated: true } }))
+      .mockResolvedValueOnce(jsonResponse({ meta: { is_authenticated: false } }, 401))
+      .mockResolvedValueOnce(jsonResponse({ meta: { is_authenticated: true } }))
       .mockResolvedValueOnce(tokenExchange('restored'))
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
@@ -288,7 +291,7 @@ describe('login with an already trusted browser', () => {
     await submitPassword(user)
 
     await waitFor(() => expect(sessionStorage.getItem('token')).toBe('restored'))
-    expect(urls(fetchMock)).toEqual([LOGIN_URL, TOKEN_EXCHANGE_URL])
+    expect(urls(fetchMock)).toEqual([LOGIN_URL, '/_allauth/browser/v1/auth/session', '/_allauth/browser/v1/auth/session', LOGIN_URL, TOKEN_EXCHANGE_URL])
   })
 
   it('leaves the Google sign-in form unchanged and without a trust field', () => {
@@ -328,7 +331,7 @@ describe('logout reliability', () => {
 
     await user.click(screen.getByRole('button', { name: /wyloguj/i }))
 
-    expect(await screen.findByRole('link', { name: /logowanie/i })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
     expect(sessionStorage.getItem('token')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
     const [, options] = deleteCalls(fetchMock)[0]
@@ -355,7 +358,7 @@ describe('logout reliability', () => {
     expect(alert).toHaveTextContent(/nie udało się potwierdzić wylogowania/i)
     expect(alert).toHaveTextContent(/zaufanie tej przeglądarki/i)
     expect(sessionStorage.getItem('token')).toBeNull()
-    expect(screen.getByRole('link', { name: /logowanie/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /ponów wylogowanie/i }))
 
@@ -395,7 +398,7 @@ describe('logout reliability', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     resolveDelete(loggedOut())
 
-    expect(await screen.findByRole('link', { name: /logowanie/i })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

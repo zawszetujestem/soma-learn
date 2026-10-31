@@ -1,0 +1,283 @@
+/* Production routes only. Reuse existing structure and token names;
+   homepage tokens, layout, handlers and content remain independent. */
+.app-shell {
+  --sl-blue: #2936C8;
+  --sl-lime: #C6E875;
+  --sl-coral: #FF9377;
+  --sl-paper: #F7F6F0;
+  --sl-ink: #20243A;
+  --sl-periwinkle: #e8ebff;
+  --sl-line: #d9d9df;
+  --paper: var(--sl-paper);
+  --ink: var(--sl-ink);
+  --forest: var(--sl-blue);
+  --leaf: var(--sl-periwinkle);
+  --lime: var(--sl-lime);
+  --coral: var(--sl-coral);
+  --sun: var(--sl-lime);
+  --line: var(--sl-line);
+  --display: 'Manrope Variable', Manrope, system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100svh;
+  padding: 20px;
+  overflow: visible;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.app-shell > * { min-width: 0; }
+.app-shell .page-width {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+}
+.app-shell main { flex: 1; }
+.app-shell h1,
+.app-shell h2,
+.app-shell h3,
+.app-shell h4 { font-family: var(--display); color: var(--ink); line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.app-shell h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 800; }
+.app-shell h2 { font-size: clamp(26px, 3vw, 36px); font-weight: 800; }
+.app-shell h3 { font-size: 23px; font-weight: 750; }
+.app-shell h4 { font-size: 18px; font-weight: 750; }
+.app-shell .eyebrow { color: var(--forest); font-size: 13px; font-weight: 800; }
+.app-shell a { color: var(--forest); text-underline-offset: 4px; }
+.app-shell a:hover { color: var(--ink); }
+.app-shell button,
+.app-shell input,
+.app-shell select,
+.app-shell textarea { font: inherit; }
+.app-shell :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--sl-blue);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 7px #fff;
+}
+
+.app-shell .site-header,
+.app-shell .site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 4px 20px #20243A06;
+}
+.app-shell .site-footer { font-size: 14px; }
+.app-shell .site-footer > a:last-child:hover { color: var(--forest); text-decoration: underline; }
+.app-shell .sl-logo { display: inline-flex; flex: 0 0 auto; width: 200px; max-width: 100%; min-height: 44px; align-items: center; }
+.app-shell .sl-logo svg { display: block; width: 100%; height: auto; font-family: var(--display); }
+.app-shell .sl-logo-soma { font-size: 44px; font-weight: 800; letter-spacing: -1.5px; }
+.app-shell .sl-logo-learn { font-size: 29px; font-weight: 500; }
+.app-shell .main-nav { width: 100%; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 8px 20px; font-size: 14px; }
+.app-shell .nav-anchor,
+.app-shell .nav-login { display: inline-flex; min-height: 44px; align-items: center; padding: 8px 12px; border-radius: 12px; color: var(--ink); }
+.app-shell .nav-anchor:hover,
+.app-shell .nav-anchor.is-active { background: var(--leaf); color: var(--forest); }
+.app-shell .nav-login { border: 1px solid var(--ink); background: #fff; }
+.app-shell .nav-login:hover,
+.app-shell .nav-login.is-active { background: var(--forest); border-color: var(--forest); color: #fff; }
+.app-shell button.nav-login { color: var(--ink); background: #fff; }
+.app-shell button.nav-login:hover:not(:disabled) { color: #fff; background: var(--forest); }
+
+.app-shell .button {
+  min-height: 48px;
+  max-width: 100%;
+  gap: 12px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 750;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 180ms, color 180ms;
+}
+.app-shell .button:hover:not(:disabled) { transform: none; }
+.app-shell .button-primary { background: var(--forest); border-color: var(--forest); color: #fff; }
+.app-shell .button-primary:hover:not(:disabled) { background: var(--ink); border-color: var(--ink); color: #fff; }
+.app-shell .button-secondary { background: #fff; border-color: var(--ink); color: var(--ink); }
+.app-shell .button-secondary:hover:not(:disabled) { background: var(--leaf); color: var(--ink); }
+.app-shell .button[aria-pressed='true']:not(:disabled) { background: var(--forest); border-color: var(--forest); color: #fff; }
+.app-shell .button-light { background: var(--lime); border-color: var(--ink); color: var(--ink); }
+.app-shell .button-light:hover:not(:disabled) { background: var(--leaf); color: var(--ink); }
+.app-shell button:disabled,
+.app-shell .button-disabled,
+.app-shell .login-panel .button:disabled { background: #e8ebff; color: #50546b; border-color: #75788c; cursor: not-allowed; opacity: 1; }
+.app-shell .text-link,
+.app-shell .auth-reset { min-height: 44px; color: var(--forest); }
+.app-shell .text-link:hover { color: var(--ink); }
+.app-shell .course-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.app-shell .login-page { min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 24px; padding-block: 12px; align-items: start; }
+.app-shell .login-intro,
+.app-shell .login-panel,
+.app-shell .simple-page,
+.app-shell .courses-header,
+.app-shell .course-section,
+.app-shell .course-form,
+.app-shell .course-card,
+.app-shell .student-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 4px 20px #20243A06;
+}
+.app-shell .login-intro { background: var(--leaf); border-color: var(--leaf); border-radius: 24px; }
+.app-shell .login-intro h1 { font-size: clamp(32px, 4vw, 48px); font-weight: 800; }
+.app-shell .login-intro h1 span { color: var(--forest); }
+.app-shell .login-intro > p:not(.eyebrow),
+.app-shell .simple-page > p:not(.eyebrow),
+.app-shell .login-notice,
+.app-shell .auth-divider { color: #50546b; }
+.app-shell .login-notice span { color: var(--ink); }
+.app-shell .login-panel h2 { font-size: clamp(26px, 3vw, 32px); font-weight: 800; }
+.app-shell .simple-page { min-height: 420px; gap: 20px; }
+.app-shell .simple-page h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 800; }
+.app-shell .courses-page { padding-block: 12px 32px; }
+.app-shell .courses-page h1 { font-size: clamp(32px, 5vw, 56px); }
+.app-shell .course-grid,
+.app-shell .student-list,
+.app-shell .task-list { gap: 20px; }
+.app-shell .course-meta { color: #50546b; }
+.app-shell .course-card h2,
+.app-shell .student-card h3 { margin: 0; }
+.app-shell .task-column { background: var(--leaf); border-radius: 20px; padding: 16px; }
+.app-shell .task-card { border-radius: 12px; padding: 16px; }
+.app-shell .task-count,
+.app-shell .task-hours { color: var(--forest); }
+.app-shell .badge { color: var(--ink); background: var(--lime); font-weight: 700; }
+.app-shell .badge-muted { color: #50546b; background: var(--leaf); }
+
+/* Functional control borders have contrast independent of decorative card lines. */
+.app-shell .login-panel input,
+.app-shell .course-form input,
+.app-shell .course-form textarea,
+.app-shell .course-form select,
+.app-shell .version-editor .field input,
+.app-shell .version-editor .field select,
+.app-shell .version-editor .field textarea,
+.app-shell .version-preview .field textarea,
+.app-shell .task-card select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #75788c;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+}
+.app-shell textarea { resize: vertical; }
+.app-shell :is(.login-panel, .course-form, .version-editor, .version-preview, .task-card) :is(input, textarea, select):disabled {
+  background: var(--leaf);
+  color: #50546b;
+  border-color: #75788c;
+}
+.app-shell input::placeholder,
+.app-shell textarea::placeholder { color: #50546b; opacity: 1; }
+.app-shell .login-panel .password-field input { padding-right: 80px; }
+.app-shell .password-toggle { min-height: 44px; border-radius: 8px; color: var(--forest); }
+.app-shell .role-picker { grid-template-columns: minmax(0, 1fr); }
+.app-shell .role-picker label { min-height: 48px; border-color: #75788c; border-radius: 10px; }
+.app-shell .role-picker label:has(input:checked) { border-color: var(--forest); background: var(--leaf); }
+.app-shell .role-picker input[type='radio'],
+.app-shell .login-panel .trust-option input[type='checkbox'],
+.app-shell .version-editor input[type='checkbox'] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--forest);
+}
+.app-shell .role-picker input[type='radio'] { margin: 0; }
+.app-shell input[type='file'] { white-space: normal; font-size: 14px; }
+.app-shell input[type='file']::file-selector-button { max-width: 100%; white-space: normal; font: inherit; }
+.app-shell .trust-option label { min-width: 0; }
+
+.app-shell .courses-status,
+.app-shell .courses-empty,
+.app-shell .courses-banner,
+.app-shell .courses-error,
+.app-shell .courses-alert,
+.app-shell .auth-error,
+.app-shell .auth-status {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--leaf);
+  overflow-wrap: anywhere;
+}
+.app-shell .courses-banner,
+.app-shell .auth-status { background: var(--lime); color: var(--ink); }
+.app-shell .courses-error,
+.app-shell .courses-alert,
+.app-shell .auth-error { border-color: #98402c; background: #fff0eb; color: #80331f; }
+.app-shell .logout-notice { flex-wrap: wrap; }
+.app-shell .logout-notice .auth-error { flex-basis: 240px; }
+
+/* Keep nested controls and long filenames inside shrinking tracks, not a clip. */
+.app-shell .version-editor,
+.app-shell .version-preview,
+.app-shell .content-node,
+.app-shell .hierarchy-node,
+.app-shell .item-form,
+.app-shell .test-editor,
+.app-shell .add-node { min-width: 0; overflow-wrap: anywhere; }
+.app-shell .editor-fieldset { min-width: 0; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+.app-shell .hierarchy-node,
+.app-shell .content-node { border-inline-start-color: var(--line); }
+.app-shell .hierarchy-list,
+.app-shell .version-program { min-width: 0; padding-inline-start: 12px; }
+.app-shell .item-form,
+.app-shell .test-editor fieldset { min-width: 0; border-color: var(--line); border-radius: 12px; background: var(--paper); }
+.app-shell .version-editor summary { min-height: 44px; padding-block: 8px; color: var(--forest); }
+.app-shell .safe-markdown { min-width: 0; }
+.app-shell .safe-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.app-shell .safe-markdown table { max-width: 100%; }
+.app-shell .confirm-backdrop { background: #20243A80; }
+.app-shell .confirm-dialog { min-width: 0; border-radius: 24px; background: #fff; color: var(--ink); box-shadow: 0 12px 48px #20243A30; }
+
+@media (min-width: 600px) {
+  .app-shell .role-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 900px) {
+  .app-shell { padding: 24px 40px; }
+  .app-shell .site-header,
+  .app-shell .site-footer { padding: 24px 32px; }
+  .app-shell .main-nav { width: auto; }
+  .app-shell .login-page { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; padding-block: 24px; }
+  .app-shell .login-intro,
+  .app-shell .login-panel { padding: 32px; }
+}
+@media (max-width: 480px) {
+  .app-shell .hierarchy-list,
+  .app-shell .version-program { list-style: none; padding-inline-start: 0; }
+  .app-shell .hierarchy-node,
+  .app-shell .content-node { padding-inline-start: 8px; }
+  .app-shell .version-editor .course-actions { align-items: stretch; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

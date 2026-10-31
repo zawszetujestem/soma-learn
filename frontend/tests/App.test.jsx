@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import App from '../src/App.jsx'
 
 const REGISTER_URL = '/api/auth/register/'
@@ -133,34 +133,45 @@ afterEach(() => {
 })
 
 describe('SOMA Learn public pages', () => {
+  it.each(['/wzory', '/wzory/', '/wzory/a', '/wzory/b', '/wzory/c', '/wzory/x', '/wzory/a/nested', '/wzory/a/nested/deeper', '/wzory?variant=a', '/wzory/c#metoda'])('renders standard NotFound without redirect at %s', (path) => {
+    function Location() {
+      const location = useLocation()
+      return <output data-testid="location">{location.pathname}{location.search}{location.hash}</output>
+    }
+    render(<MemoryRouter initialEntries={[path]}><App /><Location /></MemoryRouter>)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Tej strony tu nie ma.')
+    expect(screen.getByTestId('location')).toHaveTextContent(path)
+    expect(screen.getByRole('banner').closest('.app-shell')).not.toBeNull()
+    expect(screen.getByRole('link', { name: /Wróć na stronę główną/ })).toHaveAttribute('href', '/')
+  })
+
   it('presents the public homepage for eighth-grade students and their families', () => {
     renderAt('/')
 
-    expect(screen.getByRole('heading', { name: /soma learn/i })).toBeInTheDocument()
-    expect(screen.getByText(/ósmej klasy|klas ósmych/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Ogarnij egzamin. Krok po kroku.')
+    expect(screen.getByRole('heading', { name: 'Egzamin ósmoklasisty' })).toBeInTheDocument()
   })
 
   it('explains each part of the SOMA learning rhythm', () => {
     renderAt('/')
 
-    for (const concept of ['Vision', 'Path', 'Backlog', 'Cycle', 'Daily Focus', 'Reflection']) {
-      expect(screen.getByText(concept, { exact: false })).toBeInTheDocument()
+    for (const concept of ['Cel', 'Plan', 'Mały krok', 'Postęp']) {
+      expect(screen.getByRole('heading', { name: concept, exact: true })).toBeInTheDocument()
     }
   })
 
-  it('shows how parents support learning without managing or punishing', () => {
+  it('explains support without pressure in the factual about section', () => {
     renderAt('/')
 
-    expect(screen.getByRole('heading', { name: /blisko, ale bez/i })).toBeInTheDocument()
-    expect(screen.getByText(/rozmawiaj o tym, co pomaga/i)).toBeInTheDocument()
-    expect(screen.getByText(/bez kar/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'O nas', exact: true })).toBeInTheDocument()
+    expect(screen.getByText(/przerwa nie przekreśla/i)).toBeInTheDocument()
   })
 
-  it('describes mentor invitations only as a planned possibility', () => {
+  it('describes matura only as planned', () => {
     renderAt('/')
 
-    expect(screen.getByRole('heading', { name: /wspieraj proces/i })).toBeInTheDocument()
-    expect(screen.getByText(/planowana jest możliwość/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Matura' })).toBeInTheDocument()
+    expect(screen.getByText('Planowana')).toBeInTheDocument()
   })
 
   it('provides navigation to courses and the visual login mockup', () => {
@@ -168,7 +179,7 @@ describe('SOMA Learn public pages', () => {
 
     expect(screen.getByRole('navigation', { name: /główna/i })).toHaveAccessibleName()
     expect(screen.getByRole('link', { name: 'Kursy' })).toHaveAttribute('href', '/kursy')
-    expect(screen.getByRole('link', { name: /logowanie/i })).toHaveAttribute('href', '/logowanie')
+    expect(screen.getByRole('link', { name: 'Zaloguj się' })).toHaveAttribute('href', '/logowanie')
   })
 
   it('redirects the courses route to login when the user is not signed in', async () => {
@@ -446,6 +457,69 @@ describe('SOMA Learn public pages', () => {
     expect(storedValues(sessionStorage)).not.toContain('example-password')
   })
 
+  it('recovers a bare login conflict by confirming logout before retrying the supplied credentials', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(headlessResponse({ status: 409 }))
+      .mockResolvedValueOnce(authenticatedSession())
+      .mockResolvedValueOnce(headlessResponse({ status: 401, meta: { is_authenticated: false } }))
+      .mockResolvedValueOnce(pendingLoginByCode())
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderAt('/logowanie')
+    await submitLogin(user)
+
+    expect(await screen.findByLabelText(codeInputMatcher())).toBeInTheDocument()
+    expect(calledUrls(fetchMock)).toEqual([LOGIN_URL, '/_allauth/browser/v1/auth/session', '/_allauth/browser/v1/auth/session', LOGIN_URL])
+    expect(fetchMock.mock.calls[1][1]).toEqual(expect.objectContaining({ method: 'GET', credentials: 'include' }))
+    expect(fetchMock.mock.calls[2][1]).toEqual(expect.objectContaining({ method: 'DELETE', credentials: 'include' }))
+    expect(expectJsonBody(fetchMock, 3)).toEqual(expectJsonBody(fetchMock, 0))
+    expect(calledUrls(fetchMock)).not.toContain(TOKEN_EXCHANGE_URL)
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('does not exchange the previous account when retried credentials are invalid', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(headlessResponse({ status: 409, meta: { is_authenticated: true } }))
+      .mockResolvedValueOnce(authenticatedSession())
+      .mockResolvedValueOnce(headlessResponse({ status: 401, meta: { is_authenticated: false } }))
+      .mockResolvedValueOnce(headlessResponse({ status: 400, errors: [{ code: 'email_password_mismatch' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderAt('/logowanie')
+    await submitLogin(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nieprawidłowy email lub hasło.')
+    expect(calledUrls(fetchMock)).not.toContain(TOKEN_EXCHANGE_URL)
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('does not retry login if logout of the conflicting session is not confirmed', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(headlessResponse({ status: 409 }))
+      .mockResolvedValueOnce(authenticatedSession())
+      .mockResolvedValueOnce(headlessResponse({ status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderAt('/logowanie')
+    await submitLogin(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/nie udało się potwierdzić wylogowania/i)
+    expect(calledUrls(fetchMock).filter((url) => url === LOGIN_URL)).toHaveLength(1)
+    expect(calledUrls(fetchMock)).not.toContain(TOKEN_EXCHANGE_URL)
+  })
+
+  it.each([false, true])('preserves a repeated or unauthenticated login conflict without looping (authenticated: %s)', async (authenticated) => {
+    const conflict = mockResponse({ status: 409, message: 'Nie można rozpocząć logowania. Spróbuj ponownie.' }, 409)
+    const fetchMock = vi.fn().mockResolvedValueOnce(conflict)
+      .mockResolvedValueOnce(authenticated ? authenticatedSession() : headlessResponse({ status: 401, meta: { is_authenticated: false } }))
+    if (authenticated) fetchMock.mockResolvedValueOnce(headlessResponse({ status: 401, meta: { is_authenticated: false } })).mockResolvedValueOnce(conflict)
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderAt('/logowanie')
+    await submitLogin(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Nie można rozpocząć logowania. Spróbuj ponownie.')
+    expect(calledUrls(fetchMock).filter((url) => url === LOGIN_URL)).toHaveLength(authenticated ? 2 : 1)
+    expect(calledUrls(fetchMock)).not.toContain(TOKEN_EXCHANGE_URL)
+  })
+
   it('shows an incorrect code error and does not exchange or store a token', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(pendingLoginByCode())
@@ -609,9 +683,11 @@ describe('SOMA Learn public pages', () => {
     renderAt('/')
 
     await user.tab()
+    expect(document.activeElement).toHaveAccessibleName('Przejdź do treści')
+    await user.tab()
     expect(document.activeElement).toHaveAccessibleName('SOMA Learn, strona główna')
     await user.tab()
-    expect(document.activeElement).toHaveAccessibleName('Jak działa SOMA')
+    expect(document.activeElement).toHaveAccessibleName('Kursy')
   })
 
   it('defines a responsive layout breakpoint for narrow viewports', () => {

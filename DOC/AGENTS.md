@@ -19,6 +19,10 @@ Konfiguracje agentów dla GitHub Copilot w VS Code znajdują się w `.github/age
 
 ## Kluczowe zasady pracy
 
+- Dla homepage i wszystkich istniejących widoków produkcyjnych obowiązuje jedno źródło [zatwierdzonych wytycznych stylu](FRONTEND_STYLE.md), linkowane przez właściwe role i scoped instrukcję UX. Późniejsze zatwierdzenie rozszerza zakres stylu i usuwa warianty ABC, nie zatwierdza nowych funkcji ze specyfikacji.
+
+- Każda funkcjonalność uwzględnia dokumenty w [DOC/soma](soma/): [Compass](soma/SOMA_Compass_1.0.md) określa filozofię i zasady, [Playbook](soma/SOMA_Playbook_0.1.md) praktyczne stosowanie, a [Applications](soma/SOMA_Applications_0.1.md) projektowanie produktów. Koordynator przekazuje właściwe ustalenia rolom, analityk przekłada je na kryteria, developerzy realizują je w uzgodnionym zakresie, a QA weryfikuje zgodność.
+- Szczegółowe reguły źródeł, statusów roboczych, konfliktów i zakresu są we [wspólnych instrukcjach Copilota](../.github/copilot-instructions.md#dokumenty-soma-obowiązujące-przy-pracy-nad-funkcjonalnościami) i konfiguracjach poszczególnych agentów. Dokumenty nie zatwierdzają automatycznie nowych funkcji ani przykładów nazw. Przy UI obowiązuje także [specyfikacja frontendu](SOMA_Learn_specyfikacja_frontend.md) z uwzględnieniem późniejszych ustaleń.
 - Praca musi być prowadzona w trybie TDD.
 - Backend powinien korzystać z Django REST Framework.
 - Frontend jest budowany w React.
