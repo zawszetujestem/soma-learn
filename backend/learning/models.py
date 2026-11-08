@@ -185,6 +185,52 @@ class InstanceCycleTask(models.Model):
         ]
 
 
+class InstanceLessonCycle(models.Model):
+    """Calendar planning, independent of task cycles and lesson progress."""
+
+    class Status(models.TextChoices):
+        PLANNED = 'planned', 'Planowany'
+        ACTIVE = 'active', 'Aktywny'
+        ENDED = 'ended', 'Zakończony'
+
+    instance = models.ForeignKey(Instance, on_delete=models.CASCADE, related_name='lesson_cycles')
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLANNED)
+    start_date = models.DateField()
+    end_date = models.DateField()  # Exclusive; never changes status based on today's date.
+
+    class Meta:
+        ordering = ['-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['instance'], condition=Q(status='planned'),
+                name='one_planned_lesson_cycle',
+            ),
+            models.UniqueConstraint(
+                fields=['instance'], condition=Q(status='active'),
+                name='one_active_lesson_cycle',
+            ),
+            models.CheckConstraint(
+                condition=Q(status__in=['planned', 'active', 'ended']),
+                name='lesson_cycle_status_valid',
+            ),
+            models.CheckConstraint(
+                condition=Q(end_date__gt=models.F('start_date')),
+                name='lesson_cycle_date_range_valid',
+            ),
+        ]
+
+
+class InstanceLessonCycleLesson(models.Model):
+    cycle = models.ForeignKey(InstanceLessonCycle, on_delete=models.CASCADE, related_name='entries')
+    lesson = models.ForeignKey('CourseNode', on_delete=models.PROTECT, related_name='lesson_cycle_entries')
+
+    class Meta:
+        ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(fields=['cycle', 'lesson'], name='one_lesson_entry_per_cycle'),
+        ]
+
+
 class Classification(models.Model):
     name = models.CharField(max_length=200)
     is_active = models.BooleanField(default=True)

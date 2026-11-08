@@ -80,7 +80,10 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Login form nie utrwala emaila/hasła i inicjalizuje puste pola, zachowując `autocomplete="username"` / `current-password`. Aplikacja nie usuwa poświadczeń przeglądarki; aktywny natywny autofill zależy od browser i może wypełnić pola. Test realnego Chrome/autofill nie został wykonany. Przy konflikcie `409` frontend sprawdza sesję i potwierdza logout przed jednokrotnym ponowieniem wpisanych credentials; niepotwierdzony logout blokuje retry i wymianę poprzedniej sesji, a pozostałe konflikty wyświetlają `message` API lub komunikat zastępczy.
 - To pomijanie OTP, nie pełne zabezpieczenie konta: skopiowane cookie nadal wymaga hasła, a token DRF nadal pozostaje ważny po logout/resecie. Nie wykonano pełnego rzeczywistego E2E, PostgreSQL ani prawdziwego Google OAuth dla tej funkcji. Szczegóły kontraktu, wyników i ograniczeń: [BACKEND.md](BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia); obsługa użytkownika: [frontend/README.md](../frontend/README.md#zaufana-przeglądarka-i-wylogowanie).
 
-### Plan nauki: wiele kursów, zależności i cykle (✅ zaimplementowane, QA PASS 01.11.2026)
+### Plan nauki: wiele kursów, zależności i poprzednia tablica zadań (✅ zaimplementowane; historyczne QA 01.11.2026)
+
+Ten zakres i poniższy wynik QA z 01.11 dotyczą poprzedniej tablicy zadań `CourseTask`/`InstanceTask` oraz `InstanceCycle`/`InstanceCycleTask`. Nie opisują nowej tablicy cykli lekcji z 08.11. W historycznym opisie zamykanie instancji kończy tamten cykl zadań; nowy `InstanceLessonCycle` nie jest automatycznie kończony przy zamknięciu instancji.
+
 - Uczeń może mieć aktywne instancje różnych kursów; ponowne dołączenie do tej samej aktywnej instancji jest idempotentne. Kurs prywatny jest dostępny przez zaproszenie; w przepływie nie ma płatności.
 - `CourseTask` obsługuje jawne zależności bez self-reference i cykli. Przy dołączeniu zadania i ich zależności są kopiowane do instancji, a wersja treści jest przypinana; późniejsze zmiany planu/wersji nie przepisują jej.
 - Uczeń i przypisany mentor zachowują uprawnienia instancji. Można ręcznie prowadzić jeden cykl naraz na instancję, wybierać zadania na tablicę z backlogu, przeglądać historię oraz zamknąć i wznowić tę samą instancję bez automatycznego cyklu. Brak limitu długości i liczby zadań cyklu.
@@ -88,6 +91,14 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Niezależne QA: **PASS, bez blockerów**, po trzech poprawkach P2. Backend SQLite: **327 PASS / 8 SKIP** z 335; testy celowane **50 PASS**; migracje bez zmian, `manage.py check` 0. Frontend: kursy **186 PASS**, build PASS, wybrane 8 plików **104 PASS**; pełny przebieg **332 PASS / 7 FAIL / 1 SKIP**. Wszystkie 7 niepowodzeń pełnego przebiegu potwierdzono jako przedistniejące konflikty testów logowania/sesji/nawigacji/zaufanej przeglądarki; pełny zestaw nie jest w całości zielony. Test klawiatury w jsdom PASS.
 - Nie wykonano rzeczywistego E2E przeglądarkowego, przebiegu współbieżności PostgreSQL ani ręcznej oceny zoomu mobilnego, kontrastu i czytnika ekranu. Pozostały istniejące ostrzeżenia generowania OpenAPI dotyczące serializerów users/content i kolizji `operationId`.
 - Szczegóły modeli, API, migracji i uprawnień: [BACKEND.md](BACKEND.md); obsługa, trasy i QA: [frontend/README.md](../frontend/README.md).
+
+### Nowa tablica cykli lekcji — QA PASS 08.11.2026
+
+- Nowa funkcja używa `InstanceLessonCycle` i `InstanceLessonCycleLesson`, niezależnie od CourseTask/InstanceCycle. Na stronie instancji jej tablica zastępuje dotychczasową tablicę zadań w UI: sekcje **Aktywny cykl → Plan kolejnego cyklu → Pozostałe lekcje**; backlog grupuje lekcje w hierarchii Dział → Temat. Plan i wybór lekcji obsługują przyciski oraz przeciąganie i upuszczanie.
+- Cykle są planowane i uruchamiane/zakończone ręcznie. Zakresy API są date-only `YYYY-MM-DD`, `end_date` jest wyłączny, a interfejs pokazuje inclusive `last_day`. Ukończenie lekcji i blokowanie jej przez wymagania nie wchodzą w zakres. Zamknięta instancja jest read-only; zamknięcie **nie kończy automatycznie aktywnego cyklu lekcji** ani nie usuwa planu, a wznowienie nie uruchamia cyklu automatycznie.
+- Niezależne QA: **PASS**. Backend learning SQLite: **266 testów OK, 11 pominiętych**; endpointowa weryfikacja PostgreSQL w Dockerze: **54/54**; pełny frontend: **418 passed, 1 skipped**. Build PASS z ostrzeżeniem chunk **506.47 kB**; migracje i `manage.py check` PASS.
+- Pełny zestaw backend PostgreSQL uruchamiany na hoście nie zadziałał z powodu braku bazy `test_soma`; nie jest raportowany jako zaliczony. Wybrany zestaw endpointowych testów PostgreSQL w środowisku QA Docker zaliczył **54/54**. Ograniczenia QA: brak rzeczywistego E2E na urządzeniu mobilnym i brak E2E z czytnikiem ekranu; PASS nie potwierdza tych ścieżek.
+- Szczegóły zachowania, kontraktu API, modeli/constraints i migracji `0007`: [BACKEND.md — Cykle lekcji instancji](BACKEND.md#cykle-lekcji-instancji-nowa-tablica). Widok i ograniczenia UI: [frontend/README.md](../frontend/README.md#tablica-cykli-lekcji-na-stronie-instancji--qa-pass-08112026).
 
 ### Dokumentacja (✅)
 - Framework SOMA opisany i sformatowany

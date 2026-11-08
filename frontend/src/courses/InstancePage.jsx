@@ -5,7 +5,7 @@ import { contentApi, coursesApi } from './api.js'
 import { formatPercent, instanceStatusLabels } from './format.js'
 import { useCurrentUser, useLoader } from './RequireAuth.jsx'
 import { InstanceControls } from './InstanceParts.jsx'
-import { CycleBoard, CycleHistory, CyclePanel } from './CycleBoard.jsx'
+import LessonCycleBoard from './LessonCycleBoard.jsx'
 import { ErrorMessage, LoadingMessage } from './StateViews.jsx'
 
 // The learner always manages their own instance; an assigned mentor keeps the same rights.
@@ -53,8 +53,7 @@ function InstanceView({ user, data, setData, id }) {
   const isActive = instance.status === 'active'
   const canEdit = isActive && canManage
 
-  // Every mutation is followed by a fresh instance read: the server owns
-  // blocking, cycle closing and dependent ejection.
+  // Instance close/resume refreshes permissions and the separate lesson projection.
   async function mutate(operation) {
     setError(null)
     setBusy(true)
@@ -94,7 +93,7 @@ function InstanceView({ user, data, setData, id }) {
         <div className="course-actions instance-controls">
           {isActive && (
             <p className="instance-note">
-              Możesz zakończyć kurs w dowolnym momencie, niezależnie od postępu. Zamknięcie zakończy aktywny cykl, a historia zostanie zachowana i kurs będzie można wznowić.
+              Możesz zakończyć kurs w dowolnym momencie, niezależnie od postępu. Zamknięcie instancji nie kończy cyklu lekcji. Aktywny cykl i plan zostaną zachowane w widoku tylko do odczytu, a kurs będzie można wznowić.
             </p>
           )}
           <InstanceControls
@@ -106,20 +105,8 @@ function InstanceView({ user, data, setData, id }) {
         </div>
       )}
 
-      <CyclePanel
-        instance={instance}
-        canEdit={canEdit}
-        busy={busy}
-        onStart={() => mutate(() => coursesApi.startCycle(instance.id))}
-        onClose={(cycle) => mutate(() => coursesApi.closeCycle(instance.id, cycle.id))}
-      />
-      <CycleBoard
-        instance={instance}
-        canEdit={canEdit}
-        busy={busy}
-        onTaskChange={(task, changes) => mutate(() => coursesApi.updateInstanceTask(instance.id, task.id, changes))}
-      />
-      <CycleHistory instance={instance} />
+      <LessonCycleBoard key={instance.id} instanceId={instance.id} content={content}
+        canEdit={canEdit} busy={busy} refreshKey={instance} />
 
       <VersionContent version={content} courseId={instance.course} student={content.course_owner !== user.id && !user.roles.includes('admin')} />
     </main>

@@ -132,6 +132,13 @@ export const coursesApi = {
   ),
   startCycle: (id) => post(`/api/instances/${id}/cycles/`),
   closeCycle: (id, cycleId) => post(`/api/instances/${id}/cycles/${cycleId}/close/`),
+  getLessonCycles: (id) => get(`/api/instances/${id}/lesson-cycles/`),
+  createLessonCycle: (id, dates) => post(`/api/instances/${id}/lesson-cycles/`, dates),
+  updateLessonCycle: (id, cycleId, dates) => patch(`/api/instances/${id}/lesson-cycles/${cycleId}/`, dates),
+  startLessonCycle: (id, cycleId) => post(`/api/instances/${id}/lesson-cycles/${cycleId}/start/`),
+  closeLessonCycle: (id, cycleId) => post(`/api/instances/${id}/lesson-cycles/${cycleId}/close/`),
+  addLessonToCycle: (id, cycleId, lessonId) => post(`/api/instances/${id}/lesson-cycles/${cycleId}/lessons/`, { lesson_id: lessonId }),
+  removeLessonFromCycle: (id, cycleId, lessonId) => request('DELETE', `/api/instances/${id}/lesson-cycles/${cycleId}/lessons/${lessonId}/`),
   closeInstance: (id) => post(`/api/instances/${id}/close/`),
   resumeInstance: (id) => post(`/api/instances/${id}/resume/`),
 }

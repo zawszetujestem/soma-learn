@@ -316,7 +316,59 @@ Migracje `0002_course_versions_schema`–`0004_require_instance_version` dodają
 
 Migracja `0006_plan_dependencies_and_cycles` zmienia ograniczenie aktywnej instancji z jednego na ucznia na jedną na parę uczeń/kurs, dodaje zależności zadań planu i instancji oraz tabele cykli i ich wpisów. Istniejącym zadaniom nie dopisuje zależności, a istniejącym instancjom nie tworzy automatycznie cykli. Przed zastosowaniem migracji wykonaj i sprawdź backup bazy, następnie standardowo uruchom `python manage.py migrate` z katalogu `backend/`. Nie cofaj migracji jako metody rollbacku po nowych zapisach; w razie odtwarzania poprzedniego stanu użyj sprawdzonego backupu.
 
+### Cykle lekcji instancji (nowa tablica)
+
+Cykle lekcji są oddzielnym kalendarzowym mechanizmem od dotychczasowych, zadaniowych `InstanceCycle`/`InstanceCycleTask`. `CourseTask`/`InstanceTask`, ich zależności, statusy i endpointy pozostają bez zmian; cykle lekcji nie wybierają ani nie kończą zadań planu. `InstanceLessonCycle` ma status `planned`, `active` albo `ended`, daty oraz wpisy `InstanceLessonCycleLesson` wskazujące lekcje z przypiętej wersji. Nie ma tu statusu ukończenia lekcji ani blokowania przez wymagania.
+
+Uczeń i przypisany mentor mają odczyt i zapis; każdy inny użytkownik (także autor kursu/admin bez przypisania) otrzymuje `404 not_found`. Zamknięta instancja jest read-only (`409 instance_closed` przy mutacji). Zamknięcie/wznowienie instancji nie zmienia statusów cykli lekcji; nie dodano zmian do istniejącego lifecycle instancji.
+
+Baza endpointów: `/api/instances/{id}/lesson-cycles/`.
+
+| Metoda | Ścieżka względem bazy | Body | Sukces |
+|---|---|---|---|
+| GET | pusta | — | `200`, projekcja |
+| POST | pusta | `{start_date, end_date?}` | `201`, utworzenie planned i projekcja |
+| PATCH | `{cycle_id}/` | `{start_date?, end_date?}` | `200`, edycja dat planned i projekcja |
+| POST | `{cycle_id}/start/` | — | `200`, planned → active i projekcja |
+| POST | `{cycle_id}/close/` | — | `200`, active → ended i projekcja |
+| POST | `{cycle_id}/lessons/` | `{lesson_id}` | `200`, dodanie lekcji do planned i projekcja |
+| DELETE | `{cycle_id}/lessons/{lesson_id}/` | — | `200`, usunięcie lekcji z planned i projekcja |
+
+Wszystkie sukcesy mają tę samą projekcję:
+
+```json
+{
+  "active_cycle": null,
+  "planned_cycle": {
+    "id": 12,
+    "status": "planned",
+    "start_date": "2026-11-08",
+    "end_date": "2026-11-15",
+    "last_day": "2026-11-14",
+    "lesson_ids": [51, 52]
+  },
+  "history": []
+}
+```
+
+`active_cycle`/`planned_cycle` to obiekt w powyższym formacie albo `null`; `history` zawiera ended w kolejności malejącego ID. `lesson_ids` są w kolejności dodania i należy mapować je do drzewa `CourseNode` przypiętej `Instance.course_version`, dostępnego przez istniejące `/api/instances/{id}/content/`; API nie ujawnia kluczy odpowiedzi w projekcji cykli.
+
+- Wyłącznie lokalnie przekazane ISO `YYYY-MM-DD`, bez datetime/timezone. `start_date` włącznie, `end_date` wyłącznie; UI wyświetla inclusive `last_day = end_date - 1 dzień`.
+- Przy tworzeniu `start_date` jest obowiązkowe, pominięte `end_date` daje 7 kolejnych dni. Zakres musi mieć `end_date > start_date`; nie ma limitu długości ani wymogu dat przyszłych.
+- PATCH zachowuje pominięte pole, nie przelicza automatycznie 7 dni. Pusty PATCH jest no-op. Walidacja wynikowego zakresu odbywa się pod blokadą instancji.
+- Maksymalnie jeden active i jeden planned na instancję. Start wymaga planned i braku active. Close wymaga active i nie uruchamia planned. Upływ dat nie powoduje przejść i start/close nie przepisują dat.
+- Wybór/usuwanie lekcji oraz edycja dat są dozwolone tylko w planned. Lekcja musi mieć `kind=lesson` i należeć do przypiętej wersji; prerequisites nie są sprawdzane. Historyczne i aktywne wybory pozostają niezmienne.
+- Endpointy wymagają uwierzytelnienia (`401 not_authenticated`). Brak uprawnienia do instancji lub cykl spoza instancji zwraca `404 not_found`; mutacja zamkniętej instancji `409 instance_closed`. Błędy mają niepuste `message` i `code`, zachowują HTTP status i pola kontraktu błędów. Walidacja dat lub body: `400 validation_error`; nieistniejąca lekcja, lekcja spoza przypiętej wersji lub zły kind: `400 invalid_lesson`; brak cyklu/wpisu albo próba usunięcia nieistniejącego wpisu: `404 not_found`; duplikat wyboru: `409 lesson_already_selected`; drugi planned/active: `409 planned_lesson_cycle_exists` / `active_lesson_cycle_exists`; niedozwolony lifecycle: `409 lesson_cycle_not_planned` / `lesson_cycle_not_active`.
+
+Migracja `0007_lesson_cycles` tworzy `InstanceLessonCycle` i `InstanceLessonCycleLesson` bez backfillu i bez zmian tabel zadań. DB constraints dopuszczają najwyżej jeden planned i jeden active na instancję, ograniczają status do dozwolonych wartości, wymagają `end_date > start_date` i unikalności pary cykl/lekcja. Zapis przez serwisy używa wspólnej blokady `Instance` (`select_for_update`) również z istniejącym close/resume. Powiązanie lekcji z wersją/kind jest walidowane w serwisie (nie przez cross-table CHECK); bezpośrednie zapisy ORM/SQL omijające serwis nie powinny być używane.
+
+Zamknięcie instancji nie kończy automatycznie `InstanceLessonCycle`: aktywny cykl pozostaje aktywny, a planowany pozostaje planowany; oba są zachowane i widoczne tylko do odczytu. Wznowienie nie tworzy ani nie uruchamia cyklu. To zachowanie jest niezależne od starego `InstanceCycle`, który zamyka się wraz z instancją.
+
+Do wdrożenia wykonaj backup, a następnie standardowo `python manage.py migrate` w `backend/`. Nie cofaj migracji po nowych zapisach jako metody rollbacku; w razie potrzeby przywróć sprawdzony backup.
+
 ### Instancje ucznia, zależności zadań i cykle
+
+Ta sekcja opisuje zadaniowy `InstanceCycle`/`InstanceCycleTask`; nie opisuje kalendarzowego `InstanceLessonCycle` z osobnego API powyżej.
 
 - Uczeń może mieć równocześnie aktywne instancje różnych kursów. Dla tej samej pary uczeń/kurs istnieje najwyżej jedna aktywna instancja: ponowne dołączenie jest idempotentne i zwraca istniejącą instancję (`200`; utworzenie nowej zwraca `201`). Dołączyć można do opublikowanego, aktywnego kursu publicznego albo do prywatnego przez token zaproszenia. Ten przepływ nie realizuje płatności.
 - Instancja zachowuje wersję treści wskazaną przy dołączeniu. Zadania `CourseTask` i ich zależności są niezależnym snapshotem, a statusy zadań instancji zaczynają się jako `todo`; edycja planu lub publikacja innej wersji kursu nie przepisuje istniejącej instancji.
@@ -406,7 +458,7 @@ Trasy kursów wymagają logowania; wejścia zarządzania/edycji wymagają roli m
 | `/nauka` | Zalogowany uczeń widzi własne aktywne instancje i historię zamkniętych; instancja, w której jest tylko mentorem, nie trafia do panelu |
 | `/kursy/{id}` | Szczegóły widocznego kursu i dołączanie |
 | `/kursy/dolacz/{token}` | Dołączenie do kursu prywatnego przez link |
-| `/kursy/instancje/{id}` | Instancja i przypięta treść; obsługa backlogu, tablicy aktywnego cyklu i historii; uczeń oraz przypisany mentor zachowują uprawnienia do obsługi |
+| `/kursy/instancje/{id}` | Instancja i przypięta treść; nowa tablica cykli lekcji zastępuje dotychczasową tablicę zadań w UI; uczeń oraz przypisany mentor zachowują uprawnienia do obsługi |
 | `/kursy/moje` | Mentor: własne; admin: wszystkie publiczne i własne private, bez cudzych private |
 | `/kursy/moje/nowy` | Utworzenie tożsamości kursu i wersji 1 w stanie roboczym |
 | `/kursy/moje/{id}` | Zarządzanie kursem/planem/wersjami; autor publicznego po publikacji read-only, z licznikiem i podglądami; DELETE 200 zostaje na stronie z komunikatem archiwizacji, 204 wraca do listy |
@@ -428,7 +480,9 @@ Weryfikacja funkcji: backend SQLite **316 OK / 8 skip**, PostgreSQL **316/316 OK
 
 Ograniczenia: v1 nie obsługuje rozwiązywania ani oceniania testów; wymagania `NodePrerequisite` w treści kursu pozostają informacyjne (w odróżnieniu od egzekwowanych zależności `CourseTask` planu opisanych wyżej); walidacja plików nie jest skanowaniem antywirusowym. Responsywność J6 nie została zweryfikowana manualnie w pełnej przeglądarce przez QA.
 
-### Plan nauki i cykle — QA PASS 01.11.2026
+### Plan nauki i poprzednia tablica zadań — historyczne QA 01.11.2026
+
+Poniższy wynik QA i opis dotyczą poprzedniej tablicy zadań oraz `InstanceCycle`; nie są wynikiem QA nowej tablicy kalendarzowych cykli lekcji.
 
 Niezależne QA: **PASS, bez blockerów**, po poprawieniu trzech problemów P2 (widok tablicy mentora, sprzeczny test legacy i typy OpenAPI). Backend: pełny przebieg SQLite **327 PASS / 8 SKIP** z 335 testów; testy celowane cykli/schematu/usług **50 PASS**; `makemigrations --check --dry-run` bez zmian i `manage.py check` — 0 problemów. Przebieg współbieżności PostgreSQL pominięto. Frontend: testy kursów **186 PASS**, build PASS, wybrane 8 plików **104 PASS**; pełny zestaw **332 PASS / 7 FAIL / 1 SKIP**. Wszystkie 7 niepowodzeń pełnego przebiegu potwierdzono jako istniejące już wcześniej konflikty testów logowania/sesji/nawigacji/zaufanej przeglądarki; nie przedstawiaj pełnego zestawu jako zielonego. Testy TDD funkcji zakończono wynikiem 80 PASS po 42 niepowodzeniach i 38 zaliczeniach w fazie RED.
 

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from . import lesson_cycle_views as lesson_cycles
 
 urlpatterns = [
     path('courses/', views.CourseListCreateView.as_view(), name='course-list'),
@@ -28,6 +29,18 @@ urlpatterns = [
     ),
     path('instances/', views.InstanceListView.as_view(), name='instance-list'),
     path('instances/mine/', views.InstanceMineListView.as_view(), name='instance-mine-list'),
+    path('instances/<int:pk>/lesson-cycles/', lesson_cycles.LessonCycleListView.as_view(),
+         name='lesson-cycle-list'),
+    path('instances/<int:pk>/lesson-cycles/<int:cycle_id>/',
+         lesson_cycles.LessonCycleDetailView.as_view(), name='lesson-cycle-detail'),
+    path('instances/<int:pk>/lesson-cycles/<int:cycle_id>/start/',
+         lesson_cycles.LessonCycleStartView.as_view(), name='lesson-cycle-start'),
+    path('instances/<int:pk>/lesson-cycles/<int:cycle_id>/close/',
+         lesson_cycles.LessonCycleCloseView.as_view(), name='lesson-cycle-close'),
+    path('instances/<int:pk>/lesson-cycles/<int:cycle_id>/lessons/',
+         lesson_cycles.LessonCycleLessonView.as_view(), name='lesson-cycle-lesson'),
+    path('instances/<int:pk>/lesson-cycles/<int:cycle_id>/lessons/<int:lesson_id>/',
+         lesson_cycles.LessonCycleLessonDetailView.as_view(), name='lesson-cycle-lesson-detail'),
     path('instances/<int:pk>/cycles/', views.InstanceCycleStartView.as_view(), name='instance-cycle-start'),
     path('instances/<int:pk>/cycles/<int:cycle_pk>/close/', views.InstanceCycleCloseView.as_view(), name='instance-cycle-close'),
     path('instances/<int:pk>/', views.InstanceDetailView.as_view(), name='instance-detail'),

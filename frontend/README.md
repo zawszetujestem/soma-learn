@@ -63,7 +63,7 @@ Podglądy graficzne ABC usunięto w całości. `/wzory/*` wyświetla „Tej stro
 - `/kursy` — katalog wyłącznie opublikowanych, aktywnych kursów publicznych; wymaga logowania. Mentor/admin widzi „Utwórz nowy” i „Moje kursy”.
 - `/nauka` — panel „Moja nauka” dostępny po zalogowaniu; pokazuje własne aktywne instancje ucznia i historię zamkniętych. Nie pokazuje kursów, w których użytkownik jest wyłącznie mentorem.
 - `/kursy/{id}` — szczegóły kursu i dołączanie.
-- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja z treścią wersji przypiętej przy dołączeniu, zadaniami planu, backlogiem i tablicą cyklu.
+- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja z treścią wersji przypiętej przy dołączeniu. Na trasie instancji nowa tablica cykli lekcji zastępuje w UI dotychczasową tablicę zadań; rozdzielenie modeli i endpointów opisano w [BACKEND.md](../DOC/BACKEND.md#cykle-lekcji-instancji-nowa-tablica).
 - `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — mentor widzi własne kursy; admin wszystkie publiczne i własne private (nie cudze private). Tworzenie wymaga mentor/admin, tworzy wersję 1 roboczą; admin tylko publiczne. Zarządzanie kursem/planem zależy od uprawnień, autor publicznego po publikacji zachowuje widok read-only.
 - `/kursy/moje/{id}/wersje/{versionId}/edytuj` — edycja wersji roboczej lub odrzuconej tylko z prawem mutacji; zapis korzysta z ETag/`If-Match`. Autor publicznego po publikacji widzi pełną treść read-only zamiast formularzy zapisu.
 - `/kursy/podglad/{id}/wersje/{versionId}` — podgląd SPA dla mentora/admina, w tym przełącznik pełnego podglądu i „Oczami ucznia”; moderator może zaakceptować/odrzucić zgłoszenie.
@@ -98,7 +98,9 @@ UI ustala mutacje z roli, ownera i historii publikacji — sam numer wersji nie 
 
 Mentor przypisany do instancji nie zmienia się. Widok zarządzania autora po publikacji nie pokazuje kontrolek zapisu instancji, ale przypisany mentor zachowuje obsługę przez `/kursy/instancje/{id}` i API; read-only kursu nie odbiera uprawnień instancji.
 
-### Moja nauka, backlog i cykle — QA PASS 01.11.2026
+### Moja nauka i poprzednia tablica zadań — historyczne QA 01.11.2026
+
+Ten historyczny opis cykli i wyniki QA dotyczą poprzedniej tablicy zadań (`InstanceCycle`/`InstanceTask`), nie nowej tablicy cykli lekcji opisanej niżej. W szczególności automatyczne zakończenie cyklu przy zamknięciu instancji dotyczyło wyłącznie poprzedniego cyklu zadań.
 
 Zalogowany uczeń może mieć aktywne instancje różnych kursów jednocześnie. Ponowne dołączenie do tej samej aktywnej instancji kursu nie tworzy duplikatu. Kurs publiczny musi być aktywny i opublikowany; do kursu prywatnego dołącza się przez link zaproszenia. W tym przepływie nie ma płatności.
 
@@ -116,6 +118,15 @@ Na stronie instancji:
 Wymagania wstępne z treści kursu (`NodePrerequisite`) są odrębne i nadal informacyjne; nie są egzekwowane. W v1 nie ma rozwiązywania ani oceniania testów.
 
 Pliki kursu są przechowywane prywatnie i dostępne wyłącznie przez uwierzytelnione API. Limity: PDF ≤20 MB, JPG/PNG/WebP ≤5 MB, maksymalnie 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). Markdown teorii jest renderowany przez `react-markdown` z wyłączonym surowym HTML i walidacją linków. Podgląd ucznia nie ujawnia kluczy odpowiedzi ani poprawności opcji testowych. W v1 nie ma rozwiązywania/oceniania testów; tylko wymagania treści (`NodePrerequisite`) są informacyjne, zależności zadań planu są egzekwowane.
+
+### Tablica cykli lekcji na stronie instancji — QA PASS 08.11.2026
+
+Na `/kursy/instancje/{id}` nowa tablica cykli lekcji **zastępuje dotychczasową tablicę zadań w UI**. Pokazuje kolejno: **Aktywny cykl → Plan kolejnego cyklu → Pozostałe lekcje**. Lekcje pochodzą z drzewa przypiętej wersji; backlog zachowuje hierarchię Dział → Temat i kolejność treści. Nie jest to UI dla `CourseTask` ani `InstanceCycle`.
+
+- Uczeń i przypisany mentor mogą tworzyć i edytować planowany zakres dat, ręcznie rozpoczynać i kończyć cykl, dodawać/usuwać lekcje z planu. Wybór działa przyciskami, a lekcje można też przeciągać między planem i backlogiem (DnD). Daty w API są lokalnymi `YYYY-MM-DD`: `start_date` i `end_date` oznaczają zakres z końcem wyłącznym; formularz i widok pokazują inclusive ostatni dzień (`last_day`). Domyślny nowy plan obejmuje 7 dni.
+- Daty nie uruchamiają ani nie kończą cyklu automatycznie. Zamknięta instancja jest read-only; jej aktywny cykl lekcji **nie jest automatycznie kończony**, a plan i cykl pozostają widoczne. Wznowienie nie rozpoczyna cyklu automatycznie.
+- Ukończenie lekcji ani blokowanie jej przez wymagania nie wchodzi w zakres tej funkcji. Treść lekcji pozostaje wyświetlana osobno pod tablicą.
+- Niezależne QA: **PASS**. Backend learning SQLite: **266 OK, 11 pominiętych**; endpointowa weryfikacja PostgreSQL w Dockerze: **54/54**; pełny frontend: **418 passed, 1 skipped**. Build zaliczony z ostrzeżeniem o chunku **506.47 kB**; migracje i `manage.py check` zaliczone. Pełny backend PostgreSQL na hoście nie wystartował z powodu braku bazy `test_soma`; osobny wybrany zestaw endpointowych testów PostgreSQL w QA Docker przeszedł. Brak rzeczywistego mobile i reader E2E; PASS nie stanowi ich potwierdzenia.
 
 ### Zaufana przeglądarka i wylogowanie
 

@@ -1,0 +1,49 @@
+.lesson-cycle-board {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.lesson-cycle-zone {
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: .75rem;
+  padding: clamp(.75rem, 2vw, 1.5rem);
+  min-width: 0;
+}
+.lesson-cycle-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: .5rem;
+}
+.lesson-cycle-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: .5rem;
+  padding: .75rem;
+  overflow-wrap: anywhere;
+}
+.lesson-cycle-list li[draggable="true"] { cursor: grab; }
+.lesson-cycle-list .button { min-height: 44px; white-space: normal; }
+.lesson-cycle-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .75rem;
+  margin-block: 1rem;
+}
+.lesson-cycle-dates label { display: grid; gap: .35rem; min-width: 0; }
+.lesson-cycle-dates input { min-height: 44px; max-width: 100%; }
+.lesson-cycle-dates .instance-note, .lesson-cycle-dates .courses-alert { flex-basis: 100%; }
+.lesson-cycle-topic { padding-inline-start: .75rem; }
+.lesson-cycle-board :is(button, input, h3[tabindex]):focus-visible {
+  outline: 3px solid var(--accent, #4f46e5);
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .lesson-cycle-dates label, .lesson-cycle-dates > button, .lesson-cycle-list .button { width: 100%; }
+  .lesson-cycle-topic { padding-inline-start: 0; }
+}

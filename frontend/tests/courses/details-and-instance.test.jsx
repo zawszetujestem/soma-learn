@@ -55,12 +55,13 @@ describe('szczegóły kursu', () => {
 })
 
 describe('instancja ucznia (AC-49)', () => {
-  it('uczeń prowadzący samodzielnie może zmienić status zadania', async () => {
+  it('uczeń prowadzący samodzielnie zarządza planem lekcji zamiast statusami zadań', async () => {
     const { calls } = mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok(INSTANCE_OWN),
       'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
-      'PATCH /api/instances/11/tasks/4/': ok({ id: 4, title: 'Join', hours: '2.00', status: 'in_progress', position: 2 }),
+      'GET /api/instances/11/lesson-cycles/': ok({ active_cycle: null, planned_cycle: null, history: [] }),
+      'POST /api/instances/11/lesson-cycles/': ok({ active_cycle: null, planned_cycle: { id: 5, start_date: '2026-03-28', end_date: '2026-04-04', lesson_ids: [] }, history: [] }),
     })
     const user = userEvent.setup()
 
@@ -68,24 +69,25 @@ describe('instancja ucznia (AC-49)', () => {
 
     expect(await screen.findByRole('heading', { name: COURSE_OPEN.title })).toBeInTheDocument()
     expect(screen.getByText('50%')).toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText(/zmień status: join/i), 'in_progress')
+    expect(screen.queryByLabelText(/zmień status: join/i)).toBeNull()
+    await user.click(await screen.findByRole('button', { name: 'Utwórz plan' }))
 
-    await waitFor(() => expect(calls.some((call) => call.method === 'PATCH')).toBe(true))
-    expect(calls.find((call) => call.method === 'PATCH').body).toEqual({ status: 'in_progress' })
+    await waitFor(() => expect(calls.some((call) => call.method === 'POST')).toBe(true))
+    expect(calls.find((call) => call.method === 'POST').body).toEqual({ start_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), end_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
   })
 
-  it('w instancji z przypisanym mentorem uczeń nadal zarządza statusami i zamknięciem', async () => {
-    // Zatwierdzona zmiana: uczeń wybiera zadania, zmienia statusy i zamyka kurs także z mentorem.
+  it('w instancji z przypisanym mentorem uczeń nadal zarządza planem i zamknięciem', async () => {
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok({ ...INSTANCE_OWN, mentor: MENTOR.id }),
       'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
+      'GET /api/instances/11/lesson-cycles/': ok({ active_cycle: null, planned_cycle: null, history: [] }),
     })
 
     renderApp('/kursy/instancje/11')
 
-    expect(await screen.findByLabelText(/zmień status: join/i)).toBeEnabled()
-    expect(screen.queryByText(/tylko do odczytu/i)).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Utwórz plan' })).toBeEnabled()
+    expect(screen.queryByText(/ten widok jest tylko do odczytu|instancja jest zamknięta i jest tylko do odczytu/i)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /zamknij instancję/i })).toBeEnabled()
   })
 
@@ -94,12 +96,14 @@ describe('instancja ucznia (AC-49)', () => {
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok({ ...INSTANCE_OWN, status: 'closed', closed_at: '2026-01-05T10:00:00Z' }),
       'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
+      'GET /api/instances/11/lesson-cycles/': ok({ active_cycle: null, planned_cycle: null, history: [] }),
     })
 
     renderApp('/kursy/instancje/11')
 
     expect(await screen.findByText(/tylko do odczytu/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/zmień status: join/i)).toBeDisabled()
+    expect(screen.queryByLabelText(/zmień status: join/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Utwórz plan' })).toBeNull()
     expect(screen.getByRole('button', { name: /wznów instancję/i })).toBeEnabled()
   })
 
@@ -108,13 +112,14 @@ describe('instancja ucznia (AC-49)', () => {
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok(INSTANCE_OWN),
       'GET /api/instances/11/content/': ok({id: 2, number: 1, title: COURSE_OPEN.title, nodes: []}),
-      'PATCH /api/instances/11/tasks/4/': fail(409, { code: 'instance_closed', detail: 'Instancja jest zamknięta.' }),
+      'GET /api/instances/11/lesson-cycles/': ok({ active_cycle: null, planned_cycle: null, history: [] }),
+      'POST /api/instances/11/lesson-cycles/': fail(409, { code: 'instance_closed', detail: 'Instancja jest zamknięta.' }),
     })
     const user = userEvent.setup()
 
     renderApp('/kursy/instancje/11')
 
-    await user.selectOptions(await screen.findByLabelText(/zmień status: join/i), 'done')
+    await user.click(await screen.findByRole('button', { name: 'Utwórz plan' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/instancja jest zamknięta/i)
   })
