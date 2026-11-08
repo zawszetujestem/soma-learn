@@ -5,7 +5,7 @@ import {Action,stateLabels} from './EditorParts.jsx'
 import {visibilityLabels} from './format.js'
 import {useCurrentUser} from './RequireAuth.jsx'
 import {canManageCourse,canManageVersion,canPublishVersion} from './managementPolicy.js'
-export function VersionActions({version,course,run,check}) {
+export function VersionActions({version,course,run,check,menu=false}) {
  const user=useCurrentUser();const [reason,setReason]=useState('');const editable=['draft','rejected'].includes(version.state)
  const owner=version.course_owner===user.id
  const admin=user.roles.includes('admin')
@@ -14,7 +14,8 @@ export function VersionActions({version,course,run,check}) {
  const canSubmit=manageable&&owner&&publicCourse&&!admin
  const canPublish=canPublishVersion(user,version,course)
  const canModerate=admin&&!owner&&publicCourse&&version.state==='submitted'
- return <section className="course-section" aria-label="Cykl życia wersji"><p>Wersja {version.number} · {stateLabels[version.state]}</p>{version.rejection_reason&&<p>Powód odrzucenia: {version.rejection_reason}</p>}<div className="course-actions"><Action onClick={check}>Sprawdź poprawność</Action>{editable&&canPublish&&<Action onClick={()=>run('publish')}>Opublikuj</Action>}{editable&&canSubmit&&<Action onClick={()=>run('submit')}>Wyślij do akceptacji</Action>}{version.state==='submitted'&&canSubmit&&<Action onClick={()=>run('withdraw')}>Wycofaj</Action>}{canModerate&&<><Action onClick={()=>run('accept')}>Akceptuj</Action><Action onClick={()=>run('reject',{reason})}>Odrzuć</Action></>}</div>{canModerate&&<label className="field">Powód odrzucenia (opcjonalny)<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>}</section>
+ const actionProps=menu?{role:'menuitem'}:{}
+ return <section className="course-section" aria-label="Cykl życia wersji"><p>Wersja {version.number} · {stateLabels[version.state]}</p>{version.rejection_reason&&<p>Powód odrzucenia: {version.rejection_reason}</p>}<div className="course-actions"><Action {...actionProps} onClick={check}>Sprawdź poprawność</Action>{editable&&canPublish&&<Action {...actionProps} onClick={()=>run('publish')}>Opublikuj</Action>}{editable&&canSubmit&&<Action {...actionProps} onClick={()=>run('submit')}>Wyślij do akceptacji</Action>}{version.state==='submitted'&&canSubmit&&<Action {...actionProps} onClick={()=>run('withdraw')}>Wycofaj</Action>}{canModerate&&<><Action {...actionProps} onClick={()=>run('accept')}>Akceptuj</Action><Action {...actionProps} onClick={()=>run('reject',{reason})}>Odrzuć</Action></>}</div>{canModerate&&<label className="field">Powód odrzucenia (opcjonalny)<textarea value={reason} onChange={e=>setReason(e.target.value)}/></label>}</section>
 }
 export function ValidationIssues({result}) {return result&&<section aria-live="polite"><h2>Wynik walidacji</h2>{result.valid?<p>Wersja jest gotowa do publikacji.</p>:<ul>{result.issues?.map((issue,i)=><li key={i}>{issue.path}: {issue.message}</li>)}</ul>}</section>}
 export function VersionManagementLinks({course,onError}) {

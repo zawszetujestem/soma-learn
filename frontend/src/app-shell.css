@@ -308,3 +308,117 @@
   .app-shell *::before,
   .app-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+.app-shell .hierarchy-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+.app-shell .hierarchy-structure,
+.app-shell .hierarchy-details {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--sl-line);
+  border-radius: 20px;
+  background: #fff;
+}
+.app-shell .hierarchy-navigation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.app-shell .hierarchy-navigation-list .hierarchy-navigation-list {
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--sl-line);
+}
+.app-shell .hierarchy-navigation-list button {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-block: 8px;
+  padding: 10px 12px;
+  border: 1px solid #75788c;
+  border-radius: 12px;
+  background: var(--sl-paper);
+  color: var(--sl-ink);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.app-shell .hierarchy-navigation-list button[aria-pressed="true"] {
+  background: var(--sl-periwinkle);
+  border-color: var(--sl-blue);
+  box-shadow: inset 3px 0 var(--sl-blue);
+  font-weight: 800;
+}
+.app-shell .hierarchy-navigation-list button:focus-visible {
+  outline: 3px solid var(--sl-blue);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 4px #fff;
+}
+.app-shell .hierarchy-workspace [hidden] { display: none !important; }
+.app-shell .hierarchy-details .hierarchy-node,
+.app-shell .hierarchy-details .content-node {
+  margin: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+.app-shell .solving-placeholder {
+  margin-block: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--sl-paper);
+}
+.app-shell .solving-placeholder textarea:disabled {
+  opacity: 1;
+  color: var(--sl-ink);
+  background: var(--sl-paper);
+}
+@media (min-width: 900px) {
+  .app-shell .hierarchy-workspace {
+    grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr);
+  }
+}
+.app-shell .editor-board-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.app-shell .editor-board-list .editor-board-list { margin: .75rem 0 0 .75rem; padding-left: .75rem; border-left: 2px solid #9aabb2; }
+.app-shell .editor-board-list > li { min-width: 0; }
+.app-shell .editor-tile { position: relative; border: 1px solid var(--sl-ink); border-radius: 1rem; padding: .75rem; padding-right: 4.25rem; background: var(--sl-periwinkle); color: var(--sl-ink); }
+.app-shell .editor-tile-topic { border-left: .4rem solid var(--sl-blue); }
+.app-shell .editor-tile-lesson { background: var(--sl-lime); }
+.app-shell .editor-tile-practice { background: var(--sl-coral); }
+.app-shell .editor-tile-theory { border-left: .4rem solid var(--sl-blue); }
+.app-shell .editor-tile > button { width: 100%; min-height: 44px; min-width: 0; border: 0; background: transparent; text-align: left; padding: .5rem; cursor: pointer; color: inherit; font: inherit; }
+.app-shell .editor-tile span, .app-shell .editor-tile small { display: block; overflow-wrap: anywhere; }
+.app-shell .editor-tile small { margin-top: .4rem; }
+.app-shell .editor-menu { position: relative; display: inline-block; }
+.app-shell .editor-menu-section,
+.app-shell .editor-board > .courses-header,
+.app-shell .editor-modal .lesson-items details { position: relative; padding-right: 4.25rem; min-height: 60px; }
+.app-shell .editor-tile > .editor-menu,
+.app-shell .editor-menu-section > .editor-menu,
+.app-shell .editor-board > .courses-header > .editor-menu,
+.app-shell .editor-modal .lesson-items details > .course-actions > .editor-menu { position: absolute; top: .75rem; right: .75rem; }
+.app-shell .editor-kebab { min-width: 44px; min-height: 44px; }
+.app-shell .editor-menu-panel { position: absolute; z-index: 20; right: 0; min-width: min(17rem, 80vw); max-width: 90vw; padding: .5rem; background: #fff; border: 1px solid #aebcc2; border-radius: .75rem; box-shadow: 0 8px 24px #0002; }
+.app-shell .editor-menu-panel .button { display: block; width: 100%; margin: .25rem 0; text-align: left; white-space: normal; }
+.app-shell:where(.editor-modal-backdrop) { position: fixed; inset: 0; z-index: 100; background: #10253099; display: flex; align-items: center; justify-content: center; padding: 1rem; overscroll-behavior: contain; }
+.app-shell .editor-modal { width: min(52rem, 100%); max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain; background: #fff; color: #172c35; border-radius: 1rem; padding: 1.25rem; min-width: 0; }
+.app-shell .editor-modal-header { display: flex; justify-content: space-between; align-items: start; gap: .75rem; }
+.app-shell .editor-modal :is(input,textarea,select) { max-width: 100%; min-width: 0; }
+.app-shell .editor-modal .course-actions { flex-wrap: wrap; }
+.app-shell .editor-modal .course-section { padding: 12px; }
+.app-shell .editor-modal .hierarchy-node { margin: 0; padding-inline-start: 0; border-inline-start: 0; }
+.app-shell .editor-modal [hidden] { display: none !important; }
+.app-shell .editor-tile > button[aria-pressed="true"] { outline: 3px solid var(--sl-ink); outline-offset: 2px; border-radius: .5rem; font-weight: 800; }
+.app-shell .editor-tile > button:focus-visible { outline: 3px solid var(--sl-blue); outline-offset: 2px; box-shadow: 0 0 0 5px var(--sl-paper); border-radius: .5rem; }
+.app-shell .editor-modal-header > div { min-width: 0; }
+.app-shell .editor-breadcrumb ol { display: flex; flex-wrap: wrap; gap: .4rem; list-style: none; padding: 0; margin: 0 0 .75rem; color: var(--sl-ink); }
+.app-shell .editor-breadcrumb li { overflow-wrap: anywhere; min-width: 0; }
+.app-shell .editor-breadcrumb li + li::before { content: "/"; margin-right: .4rem; }
+.app-shell .editor-breadcrumb button { border: 0; background: transparent; color: var(--sl-blue); text-decoration: underline; font: inherit; cursor: pointer; min-height: 44px; padding: .25rem; }
+.app-shell .editor-detail-card { margin-block: 1rem; padding: 1rem; border: 1px solid var(--sl-line); border-radius: 1rem; background: var(--sl-paper); min-width: 0; }
+.app-shell .editor-detail-card > h3 { margin-top: 0; }
+.app-shell .editor-child-list { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+.app-shell:where(.editor-modal-backdrop)[hidden], .app-shell .editor-menu-panel[hidden] { display: none; }
+@media (min-width: 800px) { .app-shell .editor-board > .editor-board-list { grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); align-items: start; } }
+@media (max-width: 480px) { .app-shell:where(.editor-modal-backdrop) { padding: 0; } .app-shell .editor-modal { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; padding: .75rem; } .app-shell .editor-board-list .editor-board-list { margin-left: .25rem; padding-left: .5rem; } }

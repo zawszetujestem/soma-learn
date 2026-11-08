@@ -3,6 +3,7 @@ import {screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {mockApi,renderApp,resetTestEnv,ok,fail,MENTOR,ADMIN} from './helpers.jsx'
 import {editorApi,editorPath,V,version,manage} from './version-fixtures.jsx'
+import {settings,versionMenu} from './editor-ui.jsx'
 afterEach(resetTestEnv)
 const previewPath='/kursy/podglad/1/wersje/2'
 const actions=['Wyślij do akceptacji','Wycofaj','Opublikuj','Akceptuj','Odrzuć']
@@ -13,7 +14,7 @@ it.each([editorPath,previewPath])('admin edytuje/podgląda cudzy kurs bez zasobu
  expect(await screen.findByRole('alert')).toHaveTextContent('404')
  expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
  expect(screen.queryByRole('link',{name:'Zarządzanie kursem i plan godzinowy'})).not.toBeInTheDocument()
- if(path===editorPath){await userEvent.click(screen.getByRole('button',{name:'Zapisz draft'}));await screen.findByText('Zapisano draft.');expect(calls.find(c=>c.method==='PATCH').headers['If-Match']).toBe('"v2-r1"')}
+ if(path===editorPath){await settings(userEvent.setup());await userEvent.click(screen.getByRole('button',{name:'Zapisz draft'}));await screen.findByText('Zapisano draft.');expect(calls.find(c=>c.method==='PATCH').headers['If-Match']).toBe('"v2-r1"')}
 })
 it.each([
  [MENTOR,2,'public','draft',['Wyślij do akceptacji']],
@@ -42,6 +43,7 @@ it.each([editorPath,previewPath])('admin nie publikuje pierwszej cudzej publiczn
  const {calls}=mockApi(editorApi({},ADMIN,first))
  renderApp(path)
  await screen.findByRole('heading',{name:path===editorPath?'Edytor wersji':'Treść wersji 1'})
+ if(path===editorPath)await versionMenu(userEvent.setup())
  expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
  expect(calls.every(c=>c.method==='GET')).toBe(true)
 })
@@ -66,7 +68,8 @@ it.each([
  const {calls}=mockApi(editorApi({'GET /api/courses/mine/1/':ok(course),[`POST ${V}publish/`]:ok(version)},ADMIN))
  renderApp(path)
  const user=userEvent.setup()
- await user.click(await screen.findByRole('button',{name:'Opublikuj'}))
+ if(path===editorPath)await versionMenu(user)
+ await user.click(await screen.findByRole(path===editorPath?'menuitem':'button',{name:'Opublikuj'}))
  await screen.findByText('Zapisano zmiany.')
  expect(calls.find(c=>c.method==='POST').path).toBe(`${V}publish/`)
 })
@@ -79,7 +82,7 @@ it('brak historii nie przyznaje adminowi publish na podstawie samego numeru',asy
 })
 it('admin moderuje cudze publiczne zgłoszenie również w edytorze',async()=>{
  const {calls}=mockApi(editorApi({[`POST ${V}reject/`]:ok({...version,state:'rejected'})},ADMIN,{...version,state:'submitted'}))
- renderApp(editorPath);const u=userEvent.setup();await u.type(await screen.findByLabelText('Powód odrzucenia (opcjonalny)'),'Popraw treść');await u.click(screen.getByRole('button',{name:'Odrzuć'}));await screen.findByText('Zapisano zmiany.')
+ renderApp(editorPath);const u=userEvent.setup();await versionMenu(u);await u.type(await screen.findByLabelText('Powód odrzucenia (opcjonalny)'),'Popraw treść');await u.click(screen.getByRole('menuitem',{name:'Odrzuć'}));await screen.findByText('Zapisano zmiany.')
  expect(calls.find(c=>c.method==='POST')).toMatchObject({path:`${V}reject/`,body:{reason:'Popraw treść'},headers:{'If-Match':'"v2-r1"'}})
 })
 

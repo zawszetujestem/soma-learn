@@ -49,7 +49,7 @@ Kursy nadal wymagają logowania. „Zacznij naukę” prowadzi gościa do rejest
 
 ### Wspólny styl istniejących widoków produkcyjnych — 31.10.2026
 
-Późniejsza jawna zgoda użytkownika rozszerza styl homepage na istniejące auth, kursy, wspólny header/footer i NotFound. `src/app-shell.css` styluje je pod `.app-shell`, bez zmiany handlerów, uprawnień, lifecycle, prywatności, limitów załączników lub konfliktów rewizji 409. Katalog i formularze zachowują dotychczasowe działanie; nie dodano funkcji ani API.
+Późniejsza jawna zgoda użytkownika rozszerza styl homepage na istniejące auth, kursy, wspólny header/footer i NotFound. `src/app-shell.css` styluje je pod `.app-shell`, bez zmiany handlerów, uprawnień, lifecycle, prywatności, limitów załączników lub konfliktów rewizji 409. W ramach tej zmiany katalog i formularze zachowały dotychczasowe działanie; nie dodano funkcji ani API. Późniejszą zmianę układu edytora wersji opisano poniżej.
 
 `src/main.jsx` importuje **`styles.css` przed `app-shell.css`** — kolejność jest wymagana dla nadpisań shellu i objęta testem regresyjnym. App współdzieli istniejący eksport `HomeLogo` z `home/HomePage.jsx`; DOM typologo pozostaje bez zmian. Lokalny Manrope WOFF2 latin/latin-ext obejmuje homepage i shell. DM Sans/Fraunces/Manrope pozostają w zależnościach; cztery nieużywane fonty wariantów usunięto z manifestu i locka. `src/useLogoutFlow.js` zachowuje wspólny stan wylogowania i retry między nagłówkami.
 
@@ -71,6 +71,22 @@ Podglądy graficzne ABC usunięto w całości. `/wzory/*` wyświetla „Tej stro
 - Pełny opis modeli, lifecycle, endpointów, kodów błędów, migracji i storage: `../DOC/BACKEND.md`.
 
 Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować własny prywatny albo zgłosić publiczny do moderacji; odrzuconą wersję publiczną może ponownie zgłosić przed pierwszą publikacją. Edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji; jego zadania i zależności są kopiowane do instancji przy dołączeniu i nie aktualizują się później.
+
+### Edytor wersji: struktura i szczegóły — 08.11.2026
+
+Głównym widokiem edytora jest hierarchiczna tablica kafelków w zagnieżdżonej liście: **Dział → Temat → Lekcja → materiały teorii/praktyki**. Kafelki działu, tematu, lekcji i materiału otwierają modal szczegółów i edycji; treści oraz metadane nie są wyświetlane na tablicy. Pozycje praktyki są oznaczone jako „Zadanie”; to materiały lekcji (`LessonItem`), nie zadania planu godzinowego (`CourseTask`). Akcje poszczególnych elementów są dostępne w ich menu `⋮`.
+
+Menu `⋮` kafelka lub obsługiwanej sekcji jest stale w prawym górnym rogu. Kolorowe kafelki korzystają z istniejącej palety, z zachowaniem odpowiedniego kontrastu. Ustawienia wersji są pozycją menu `⋮` w sekcji „Edytor kursu”; otwierają osobny dialog metadanych i zasobów. Lifecycle wersji (m.in. walidacja, publikacja i zgłoszenie do akceptacji) pozostaje w odrębnym menu.
+
+Modal hierarchii pokazuje w lewym górnym obszarze pełną, klikalną ścieżkę przodków. Kliknięcie przodka przełącza treść w tym samym dialogu, bez utraty szkiców. Sekcje dialogu są w kolejności: **Podstawowe → Elementy podrzędne/materiały → Wymagania wstępne → Test**. Dodawanie działu, tematu, lekcji i materiału, ustawienia wersji oraz usuwanie otwierają osobne dialogi.
+
+Nadal działają edycja tytułów, wymagań wstępnych i testów, teorii oraz praktyki, przesyłanie plików, wybór sposobu odpowiedzi (`answer_mode`: otwarte lub z kluczem) i edycja poprawnej odpowiedzi, zmiana kolejności oraz usuwanie. Test jest po teorii i praktyce zarówno w edytorze, jak i w widoku read-only. Zapis korzysta z ETag; przy nieaktualnej rewizji edytor odświeża wersję i zachowuje wpisane pola. Odczyt wersji read-only nie udostępnia mutacji. Zmiana wyboru ani zamknięcie modalu nie kasuje niezapisanych formularzy; nie oznacza to automatycznego zapisu.
+
+Tylko pole „Sposób rozwiązania” jest placeholderem: ma jawny badge „W przygotowaniu” i jest nieaktywne. Nie ma dla niego API ani pola w wysyłanych danych; nie zastępuje działającej edycji odpowiedzi.
+
+Pusta tablica zachęca do dodania pierwszego działu. Wybrany kafelek jest wyróżniony; zmiana kolejności zachowuje wybór. Po usunięciu wybranego materiału praktyki wybór i fokus przechodzą do jego lekcji; po usunięciu węzła — do najbliższego zachowanego przodka lub pierwszego dostępnego elementu, a przy pustej strukturze fokus wraca do nagłówka „Struktura”.
+
+Niezależne QA po rechecku trzech wcześniejszych blockerów: **PASS dla wszystkich trzech**, bez poziomego overflow w Chromium przy 1280 i 390 px, oraz pozytywne sprawdzenie focusu, dodawania zagnieżdżonego elementu w modalu, zachowania szkiców i kontrastu. `npm.cmd test -- tests/courses`: **243 passed (25 plików)**; dodatkowy przebieg celowany: **81 passed (9 plików)**. Build **PASS** z nieblokującym ostrzeżeniem o chunku 500.37 kB; `git diff --check` **PASS**. Pełny frontend: **389 passed, 7 failed, 1 skipped (34 pliki)**. Niezależny baseline, po podstawieniu modułów produkcyjnych HEAD w pamięci, uzyskał **79 passed i te same 7 błędów auth/sesji**; są one potwierdzone jako wcześniejszy, niezwiązany problem. QA nie obejmowało rzeczywistego API ani czytnika ekranu; macierz przeglądarek jest niepełna. Ten wpis dokumentuje wyniki QA przekazane przed aktualizacją; testów nie ponawiano podczas aktualizacji dokumentacji.
 
 ### Zarządzanie kursem i uprawnienia — 08.11.2026
 
@@ -125,6 +141,12 @@ Na etapie wpisania kodu dostępny jest domyślnie niezaznaczony checkbox „Zapa
 Nie jest to gwarancja pełnego bezpieczeństwa: skopiowane cookie przed cofnięciem zaufania może pomijać OTP w innym profilu (nadal wymaga hasła). Istniejący token DRF pozostaje ważny po logout/resecie hasła; usunięcie go z karty nie unieważnia go na serwerze. Szczegóły cookie, modelu, migracji i ograniczeń: [dokumentacja backendu](../DOC/BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia).
 
 ## Weryfikacja
+
+### Edytor wersji: struktura i szczegóły — niezależne QA PASS 08.11.2026
+
+Po poprawkach niezależne QA potwierdziło **PASS** trzech wcześniejszych blockerów. `npm.cmd test -- tests/courses` — **25 plików, 243 PASS**; dodatkowy zestaw celowany — **9 plików, 81 PASS**; build **PASS** z nieblokującym ostrzeżeniem chunk 500.37 kB; `git diff --check` **PASS**. Chromium przy 1280 i 390 px nie wykazał poziomego overflow; sprawdzono fokus, osobne dialogi dodawania, zachowanie szkiców i kontrast.
+
+Pełny frontend zakończył się wynikiem **389 PASS, 7 FAIL, 1 skipped** (34 pliki). Niezależny baseline, po podstawieniu modułów produkcyjnych `HEAD` w pamięci, wykazał **te same 7 błędów auth/sesji**; QA potwierdziło, że są wcześniejsze i niezwiązane z edytorem. Nie testowano rzeczywistego API ani czytnika ekranu; macierz przeglądarek jest niepełna. Dokumentację zaktualizowano po QA; testów nie ponawiano podczas tej aktualizacji.
 
 ### Zarządzanie i usuwanie kursów — niezależne QA PASS 08.11.2026
 
