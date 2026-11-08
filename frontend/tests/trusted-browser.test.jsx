@@ -343,6 +343,12 @@ describe('logout reliability', () => {
     await user.click(loginLink)
     expect(screen.getByLabelText(/^email$/i)).toHaveValue('')
     expect(screen.getByLabelText(/^hasło$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^email$/i)).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(/^hasło$/i)).toHaveAttribute('autocomplete', 'off')
+    expect(screen.getByLabelText(/^hasło$/i)).toBeDisabled()
+
+    await user.type(screen.getByLabelText(/^email$/i), 'ala@example.test')
+    expect(screen.getByLabelText(/^hasło$/i)).toBeEnabled()
     expect(screen.getByLabelText(/^email$/i)).toHaveAttribute('autocomplete', 'username')
     expect(screen.getByLabelText(/^hasło$/i)).toHaveAttribute('autocomplete', 'current-password')
   })

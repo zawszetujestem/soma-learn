@@ -298,6 +298,7 @@ const googleCallback = new URL('/logowanie/google/callback', frontendBase).href
 
 export function LoginPage() {
   const [stage, setStage] = useState('password')
+  const [loginEmail, setLoginEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -447,9 +448,22 @@ export function LoginPage() {
       {stage !== 'complete' && <form key={stage} onSubmit={submit} aria-busy={busy}>
         {stage === 'password' ? <>
           <label htmlFor="login-email">Email</label>
-          <input id="login-email" name="email" type="email" autoComplete="username" required disabled={busy} />
+          <input
+            id="login-email"
+            name="email"
+            type="email"
+            autoComplete={loginEmail ? 'username' : 'off'}
+            value={loginEmail}
+            onChange={(event) => setLoginEmail(event.target.value)}
+            required
+            disabled={busy}
+          />
           <label htmlFor="login-password">Hasło</label>
-          <PasswordInput id="login-password" autoComplete="current-password" disabled={busy} />
+          <PasswordInput
+            id="login-password"
+            autoComplete={loginEmail ? 'current-password' : 'off'}
+            disabled={busy || !loginEmail.trim()}
+          />
           <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Logowanie…' : 'Zaloguj się'}</button>
         </> : stage === 'code' ? <>
           <label htmlFor="login-code">Kod weryfikacyjny</label>
@@ -472,6 +486,7 @@ export function LoginPage() {
       {notice && <p className="auth-status" role="status">{notice}</p>}
       {stage === 'code' && <button className="auth-reset" type="button" disabled={busy} onClick={() => {
         setStage('password')
+        setLoginEmail('')
         setCode('')
         setRememberBrowser(false)
         setError('')

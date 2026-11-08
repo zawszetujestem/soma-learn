@@ -23,12 +23,24 @@ afterEach(() => {
 })
 
 describe('browser password manager support', () => {
-  it('marks login fields for saved-credential autofill', () => {
+  it('keeps login fields empty until email entry enables saved-password autofill', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 401)))
+    const user = userEvent.setup()
     renderAt('/logowanie')
 
-    expect(screen.getByLabelText(/^email$/i)).toHaveAttribute('autocomplete', 'username')
-    expect(screen.getByLabelText(/^hasło$/i)).toHaveAttribute('autocomplete', 'current-password')
+    const email = screen.getByLabelText(/^email$/i)
+    const password = screen.getByLabelText(/^hasło$/i)
+    expect(email).toHaveValue('')
+    expect(email).toHaveAttribute('autocomplete', 'off')
+    expect(password).toHaveValue('')
+    expect(password).toBeDisabled()
+    expect(password).toHaveAttribute('autocomplete', 'off')
+
+    await user.type(email, 'ala@example.test')
+
+    expect(password).toBeEnabled()
+    expect(email).toHaveAttribute('autocomplete', 'username')
+    expect(password).toHaveAttribute('autocomplete', 'current-password')
     expect(screen.getByLabelText(/^hasło$/i)).toHaveAttribute('name', 'password')
   })
 
@@ -46,6 +58,7 @@ describe('show/hide password toggle', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 401)))
     const user = userEvent.setup()
     renderAt('/logowanie')
+    await user.type(screen.getByLabelText(/^email$/i), 'ala@example.test')
     const password = screen.getByLabelText(/^hasło$/i)
     const toggle = screen.getByRole('button', { name: /^pokaż$/i })
 
@@ -70,6 +83,7 @@ describe('show/hide password toggle', () => {
     vi.stubGlobal('fetch', fetchMock)
     const user = userEvent.setup()
     renderAt('/logowanie')
+    await user.type(screen.getByLabelText(/^email$/i), 'ala@example.test')
     await screen.findByLabelText(/^hasło$/i)
     const callsBefore = fetchMock.mock.calls.length
 
@@ -83,6 +97,7 @@ describe('show/hide password toggle', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 401)))
     const user = userEvent.setup()
     renderAt('/logowanie')
+    await user.type(screen.getByLabelText(/^email$/i), 'ala@example.test')
     const password = screen.getByLabelText(/^hasło$/i)
     await user.click(screen.getByRole('button', { name: /^pokaż$/i }))
     expect(password).toHaveAttribute('type', 'text')
