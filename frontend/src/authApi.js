@@ -54,7 +54,10 @@ const fieldNames = {
 export function responseError(response, payload) {
   if (response.status === 429) return 'Zbyt wiele prób. Odczekaj chwilę i spróbuj ponownie.'
   if (response.status >= 500) return 'Błąd serwera. Spróbuj ponownie później.'
-  if (response.status === 409) return 'Sesja logowania uległa zmianie. Zaloguj się ponownie.'
+  if (response.status === 409) {
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message
+    return 'Sesja logowania uległa zmianie. Zaloguj się ponownie.'
+  }
   if (payload.errors?.some((error) => error.code === 'invalid_or_expired_key')) {
     return 'Link potwierdzenia jest nieprawidłowy lub wygasł.'
   }
@@ -80,7 +83,7 @@ export async function exchangeToken() {
   sessionStorage.setItem('token', payload.token)
 }
 
-export const logoutUnconfirmedError = 'Usunęliśmy dane logowania z tej karty, ale nie udało się potwierdzić wylogowania na serwerze. Zaufanie tej przeglądarki mogło nie zostać cofnięte. Ponów wylogowanie.'
+export const logoutUnconfirmedError = 'Usunęliśmy lokalny token, ale nie udało się potwierdzić wylogowania na serwerze. Sesja może nadal być aktywna. Jeśli ta przeglądarka była zapamiętana, zachowa zaufanie do końca pierwotnych 24 godzin; ponowne logowanie nadal wymaga hasła. Ponów wylogowanie.'
 
 export async function logout() {
   try {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, postJson, responseError } from './authApi.js'
+import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, logout, logoutUnconfirmedError, postJson, responseError } from './authApi.js'
 import { clearToken } from './courses/api.js'
 
 function AuthLayout({ title, children }) {
@@ -343,6 +343,7 @@ export function LoginPage() {
     setBusy(true)
     setError('')
     let finishing = stage === 'exchange'
+    let endingConflictingSession = false
     const finish = () => {
       finishing = true
       return finishLogin()
@@ -351,16 +352,35 @@ export function LoginPage() {
       if (stage === 'exchange') {
         await finish()
       } else if (stage === 'password') {
-        const { response, payload } = await postJson('/_allauth/browser/v1/auth/login', {
+        const credentials = {
           email: form.get('email'), password: form.get('password'),
-        })
+        }
+        let { response, payload } = await postJson('/_allauth/browser/v1/auth/login', credentials)
+        if (response.status === 409) {
+          const session = await getJson('/_allauth/browser/v1/auth/session')
+          if (session.response.status === 200 && session.payload.meta?.is_authenticated === true) {
+            endingConflictingSession = true
+            await logout()
+            endingConflictingSession = false
+            const retry = await postJson('/_allauth/browser/v1/auth/login', credentials)
+            response = retry.response
+            payload = retry.payload
+          } else if (
+            ![200, 401].includes(session.response.status)
+            || session.payload.meta?.is_authenticated !== false
+          ) {
+            setError(responseError(session.response, session.payload))
+            return
+          } else {
+            setError(responseError(response, payload))
+            return
+          }
+        }
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
         } else if (response.status === 200 && payload.meta?.is_authenticated === true && !payload.errors?.length) {
           // Trusted browser: the backend skipped OTP after a correct password.
-          await finish()
-        } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
           await finish()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
@@ -380,9 +400,15 @@ export function LoginPage() {
         }
       }
     } catch (failure) {
-      setError(stage === 'code' || finishing
-        ? failure.message === 'Failed to fetch' ? connectionError : 'Nie udało się dokończyć logowania. Spróbuj ponownie.'
-        : connectionError)
+      if (endingConflictingSession || failure.message === logoutUnconfirmedError) {
+        setError(logoutUnconfirmedError)
+      } else if (stage === 'code' || finishing) {
+        setError(failure.message === 'Failed to fetch'
+          ? connectionError
+          : 'Nie udało się dokończyć logowania. Spróbuj ponownie.')
+      } else {
+        setError(connectionError)
+      }
     } finally {
       setBusy(false)
     }
@@ -434,7 +460,7 @@ export function LoginPage() {
             <label htmlFor="remember-browser">Zapamiętaj mnie w tej przeglądarce</label>
           </div>
           <p className="login-notice trust-help" id="remember-browser-help">
-            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki. Wylogowanie cofa to zaufanie.
+            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach ani po wylogowaniu. Wylogowanie kończy sesję, ale nie usuwa zaufania tej przeglądarki. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki.
           </p>
           <button className="button button-primary" type="submit" disabled={busy || !remaining}>{busy ? 'Weryfikowanie…' : 'Potwierdź kod'}</button>
           <button className="button button-secondary" type="button" onClick={resend} disabled={busy || resendLocked || !remaining || cooldown > 0}>

@@ -128,16 +128,18 @@ Token przekazuje się jako `Authorization: Token <token>`. Frontend przechowuje 
 - Konto musi być aktywne i mieć potwierdzony email. Funkcja jest dostępna dla wszystkich ról, także admin, staff i superuser, bez dodatkowych ograniczeń dla kont uprzywilejowanych.
 - Reset hasła Headless i legacy oraz każda inna zmiana zapisanego hasha hasła unieważniają zaufania wszystkich profili przez niezgodność fingerprintu. Rekordy nie są wtedy od razu fizycznie kasowane. Zmiana `SECRET_KEY` również unieważnia zaufania.
 - Cookie jest poświadczeniem typu bearer, nie dowodem posiadania konkretnego urządzenia: skopiowane przed unieważnieniem może służyć do pominięcia OTP w innym profilu, ale nadal wymaga poprawnego hasła. Nie należy włączać opcji na współdzielonym urządzeniu/profilu.
-- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po utracie/wygaśnięciu sesji, o ile nie wykonano wylogowania i nadal trwa TTL. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
+- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po wylogowaniu lub utracie/wygaśnięciu sesji, jeśli nadal trwa pierwotny TTL i fingerprint hasła jest zgodny. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
 - Google i formularz `/admin/` pozostają bez zmian; formularz Django admin już wcześniej nie wymagał OTP. Nie jest to wdrożenie pełnego MFA ani pełny audyt bezpieczeństwa.
 
 #### Wylogowanie (allauth Headless)
 
-`DELETE /_allauth/browser/v1/auth/session` kończy sesję i usuwa cookie `soma_trusted_browser` oraz odpowiadający mu rekord serwerowy, także gdy sesja już wygasła. Replay cofniętego cookie nie pomija OTP; inne profile zachowują zaufanie. Żądania przeglądarkowe nadal wymagają CSRF.
+`DELETE /_allauth/browser/v1/auth/session` kończy sesję, ale nie usuwa ani nie rotuje cookie `soma_trusted_browser` lub odpowiadającego mu rekordu serwerowego. Zaufanie przetrwa potwierdzone wylogowanie oraz wylogowanie z wygasłą sesją, bez przedłużenia pierwotnych 24 godzin. Do końca tego okresu ten sam profil nadal wymaga poprawnego hasła, a pomija wyłącznie OTP; wygaśnięcie zaufania lub zmiana hasła ponownie wymuszają OTP. Żądania przeglądarkowe nadal wymagają CSRF.
 
-Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że serwer mógł nie zakończyć sesji/cofnąć zaufania, i udostępnia „Ponów wylogowanie”. Samo usunięcie tokenu z karty nie potwierdza unieważnienia po stronie serwera.
+Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że sesja serwerowa może nadal być aktywna, i udostępnia „Ponów wylogowanie”. Retry służy zakończeniu sesji, nie cofnięciu zaufania. Samo usunięcie tokenu z karty nie potwierdza zakończenia sesji po stronie serwera.
 
-**Istniejące ryzyko:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; cofnięcie zaufania przeglądarki nie rozwiązuje tego problemu.
+**Istniejące ryzyko poza zakresem:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; zaufanie przeglądarki jest odrębnym mechanizmem.
+
+Obsługa konfliktu logowania `409`, lokalnych pól formularza i ograniczeń natywnego autofill: [frontend/README.md](../frontend/README.md#zaufana-przeglądarka-i-wylogowanie). Nie zmieniono logowania Google.
 
 #### Zablokowane endpointy Headless
 
@@ -510,13 +512,24 @@ docker compose up -d mailpit
 
 ## Weryfikacja zaufanej przeglądarki — 30.10.2026
 
-QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji względem bazowego HEAD `a4e233a` z roboczymi zmianami funkcji, nie ponowne uruchomienie testów w ramach aktualizacji dokumentacji.
+Historyczne QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji względem bazowego HEAD `a4e233a` z roboczymi zmianami funkcji, nie ponowne uruchomienie testów w ramach aktualizacji dokumentacji. Ówczesne zachowanie cofania zaufania przy logout zastąpiła zmiana z 08.11.2026 opisana powyżej; wyniki poniżej pozostają zapisem historycznym.
 
 - TDD autorów: backend — faza RED 29 testów, 26 niepowodzeń → 29 zielonych; pełny zestaw 236 OK, 1 pominięty. Frontend — 16 niepowodzeń i 50 zaliczonych → 66 zielonych; pełny zestaw 143 zaliczone, 1 pominięty; build OK.
 - Niezależne QA backendu: pełny zestaw 236 OK, 1 pominięty; testy celowane 29 OK (`users.tests.test_trusted_browser_contract`); `check` — 0 problemów; `makemigrations` — brak zmian. Dodatkowe 6 testów uruchomionych przez stdin: wszystkie OK, bez utrwalania plików.
 - Niezależne QA frontendu: pierwszy pełny przebieg 142 zaliczone, 1 niepowodzenie, 1 pominięty; istniejący flaky P3 w `frontend/tests/courses/guard-and-courses.test.jsx:87` („finish nie funkcja”) dotyczy fragmentu identycznego z bazowym HEAD; nie uruchamiano osobnego przebiegu na bazowym HEAD. Izolowany zestaw 14 OK, ponowiony pełny przebieg 143 zaliczone, 1 pominięty; testy celowane 21 OK, build OK. Flaky nie naprawiano w tym zakresie.
 - Chrome, smoke z syntetycznym HTTP: checkbox przy 390×844 oraz ponawianie wylogowania przy szerokości 1280 px — bez poziomego overflow.
 - Nie wykonano pełnego rzeczywistego E2E frontend + backend, testów tej funkcji na PostgreSQL, prawdziwego Google OAuth, testu na fizycznym telefonie ani z czytnikiem ekranu/pełnego audytu WCAG. Wcześniejsze QA lokalnego Dockera nie zastępuje tych kontroli.
+
+## Zaufanie po wylogowaniu i konflikt logowania — QA PASS 08.11.2026
+
+Wyniki przekazane z odbioru; przy aktualizacji dokumentacji sprawdzono kod i testy kontraktowe, ale nie uruchamiano ponownie testów ani builda.
+
+- Główne środowisko backendu: `users` — **103 OK**; ostatni przebieg kontraktu `users.tests.test_trusted_browser_contract` — **29 OK**.
+- Frontend: testy celowane — **92 PASS**; pełny zestaw — **396 PASS, 1 skipped**; build **PASS** z nieblokującym ostrzeżeniem chunk **501.42 kB**; diff-check **PASS**.
+- Niezależne QA: **bez blockerów**. Własne uruchomienie testów backendu przez agenta QA było zablokowane przez wersję allauth w jego środowisku; nie jest to błąd głównego przebiegu backendu, który wykonano poprawnie w głównym środowisku.
+- Nie wykonano testu w realnym Chrome z natywnym autofill. Aplikacja inicjalizuje puste pola i nie utrwala emaila/hasła, ale nie usuwa poświadczeń zapisanych przez przeglądarkę i nie gwarantuje pustych pól przy aktywnym autofill. Google poza zakresem.
+- Potwierdzony kontrakt: poprawny OTP z `remember_browser=true` wydaje zaufanie; logout z aktywną lub wygasłą sesją zachowuje cookie i rekord bez rotacji i odnowienia TTL. Nadal wymagane jest poprawne hasło, a zmiana hasła lub wygaśnięcie ponownie wymuszają OTP. Przy `409` frontend sprawdza sesję i potwierdza logout przed jednokrotnym ponowieniem wpisanych danych; niepotwierdzony logout zatrzymuje ponowienie i nie wymienia starej sesji na token.
+- Ryzyka pozostają: token DRF nie jest unieważniany po logout; skopiowane ważne cookie może pomijać OTP do końca TTL, lecz nadal wymaga poprawnego hasła. Nie jest to pełny audyt bezpieczeństwa.
 
 ## Następne kroki
 

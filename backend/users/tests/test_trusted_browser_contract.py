@@ -339,40 +339,48 @@ class TrustedBrowserLoginContractTests(TrustedBrowserMixin, TestCase):
 
 
 class TrustedBrowserLogoutContractTests(TrustedBrowserMixin, TestCase):
-    def assert_cookie_deleted(self, response):
-        self.assertIn(COOKIE, response.cookies)
-        self.assertEqual(response.cookies[COOKIE].value, '')
-        self.assertEqual(int(response.cookies[COOKIE]['max-age']), 0)
-
-    def test_logout_revokes_only_this_profile_and_replay_fails(self):
+    def test_logout_preserves_trust_and_allows_password_login_without_code(self):
         profile_a = self.remembered_client()
         profile_b = self.remembered_client()
         raw_a = profile_a.cookies[COOKIE].value
+        row_a = trusted_browser_model().objects.filter(user=self.user).first()
+        expires_at = row_a.expires_at
         self.assertEqual(trusted_browser_model().objects.filter(user=self.user).count(), 2)
 
         response = self.logout(profile_a)
 
-        self.assert_cookie_deleted(response)
+        self.assertNotIn(COOKIE, response.cookies)
+        self.assertEqual(profile_a.cookies[COOKIE].value, raw_a)
         self.assertFalse(self.session(profile_a)['meta']['is_authenticated'])
-        self.assertEqual(trusted_browser_model().objects.filter(user=self.user).count(), 1)
+        row_a.refresh_from_db()
+        self.assertEqual(row_a.expires_at, expires_at)
+        self.assertEqual(trusted_browser_model().objects.filter(user=self.user).count(), 2)
+
+        self.assert_trusted_login(profile_a)
+
         replay = self.browser_client()
         replay.cookies[COOKIE] = raw_a
-        self.assert_code_required(replay)
+        self.assert_trusted_login(replay)
         self.drop_session(profile_b)
         self.assert_trusted_login(profile_b)
 
-    def test_logout_with_expired_session_still_revokes_and_deletes_cookie(self):
+    def test_logout_with_expired_session_preserves_trust(self):
         client = self.remembered_client()
         raw = client.cookies[COOKIE].value
+        expires_at = trusted_browser_model().objects.get(user=self.user).expires_at
         Session.objects.all().delete()
 
         response = self.logout(client)
 
-        self.assert_cookie_deleted(response)
-        self.assertFalse(trusted_browser_model().objects.filter(user=self.user).exists())
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.json()['meta']['is_authenticated'])
+        self.assertNotIn(COOKIE, response.cookies)
+        self.assertEqual(client.cookies[COOKIE].value, raw)
+        row = trusted_browser_model().objects.get(user=self.user)
+        self.assertEqual(row.expires_at, expires_at)
         replay = self.browser_client()
         replay.cookies[COOKIE] = raw
-        self.assert_code_required(replay)
+        self.assert_trusted_login(replay)
 
     def test_logout_without_trust_cookie_still_works(self):
         client = self.browser_client()

@@ -125,22 +125,34 @@ Cookie sesji serwerowej może pozostać aktywne po otwarciu nowej karty lub utra
 
 Frontend sprawdza sesję przez `GET /_allauth/browser/v1/auth/session`. Jeśli jest uwierzytelniona, kończy ją przez istniejącą obsługę wylogowania i dopiero po potwierdzeniu ponawia logowanie podanymi danymi — najwyżej raz. Nie wymienia starej sesji na token poprzedniego konta. Ponowne logowanie nadal wymaga poprawnego hasła i, gdy backend tego wymaga, kodu OTP.
 
-Zakończenie poprzedniej sesji cofa również zaufanie tej przeglądarki; kod OTP może więc być wymagany ponownie. Niepotwierdzone wylogowanie zatrzymuje ponowienie i pokazuje ostrzeżenie. Pozostałe konflikty zachowują komunikat `message` z API albo jawny polski komunikat zastępczy.
+Zakończenie poprzedniej sesji zachowuje zaufanie tej przeglądarki bez usuwania lub rotacji cookie/rekordu i bez przedłużania TTL. Niepotwierdzone wylogowanie zatrzymuje ponowienie, nie wymienia poprzedniej sesji na token i pokazuje ostrzeżenie. Pozostałe konflikty zachowują komunikat `message` z API albo jawny polski komunikat zastępczy.
 
-QA poprawki (31.10.2026): 93 testy auth/sesji/resetu i dodatkowe 50 testów formularzy/stylu/homepage zaliczone, build poprawny; niezależna kontrola kodu pozytywna. Nie wykonano rzeczywistego E2E z cookie użytkownika ani testu równoczesnych zmian sesji w innych kartach.
+Historyczne QA poprawki (31.10.2026): 93 testy auth/sesji/resetu i dodatkowe 50 testów formularzy/stylu/homepage zaliczone, build poprawny; niezależna kontrola kodu pozytywna. Nie wykonano rzeczywistego E2E z cookie użytkownika ani testu równoczesnych zmian sesji w innych kartach. Aktualny odbiór opisano w sekcji weryfikacji z 08.11.2026.
+
+#### Pola logowania i autofill
+
+Aplikacja nie utrwala emaila ani hasła i inicjalizuje formularz z pustymi polami; wpisane credentials służą bieżącemu żądaniu oraz ewentualnemu pojedynczemu retry po potwierdzonym logout. Zachowane są `autocomplete="username"` dla emaila i `autocomplete="current-password"` dla hasła. Aplikacja nie usuwa poświadczeń zapisanych przez przeglądarkę ani menedżer haseł. Natywny autofill zależy od browser: przy aktywnym autofill nie można zagwarantować, że widoczne pola pozostaną puste. Nie wykonano testu w realnym Chrome z autofill; Google poza zakresem.
+
+#### Zaufanie po poprawnym kodzie
 
 Na etapie wpisania kodu dostępny jest domyślnie niezaznaczony checkbox „Zapamiętaj mnie w tej przeglądarce” (zaufanie na 24 godziny). Nie jest dostępny na etapie hasła ani przy logowaniu Google. Nie zaznaczaj go na współdzielonym urządzeniu lub we wspólnym profilu przeglądarki.
 
 - Zgoda jest wysyłana jako boolean `remember_browser` tylko z potwierdzeniem OTP (`POST /_allauth/browser/v1/auth/code/confirm`). Zaufanie powstaje dopiero po poprawnym kodzie i pełnym uwierzytelnieniu, na 24 godziny od tego potwierdzenia. Nowe logowanie resetuje wybór checkboxa.
 - W tym czasie kolejne logowanie w tym profilu nadal wymaga e-maila i hasła, ale może zakończyć się bez kodu i bez e-maila OTP. Frontend obsługuje zarówno standardowe `401` z oczekującym `login_by_code`, jak i bezpośrednie `200` z `meta.is_authenticated: true`, po czym wymienia token DRF.
-- Kolejne użycia nie przedłużają 24 godzin. To nie jest opcja utrzymywania sesji ani zmiana jej czasu. Najczęstsze zastosowanie to ponowne logowanie po utracie/wygaśnięciu sesji bez wcześniejszego wylogowania.
+- Kolejne użycia ani logout nie przedłużają pierwotnych 24 godzin. To nie jest opcja utrzymywania sesji ani zmiana jej czasu. Zaufanie działa również przy ponownym logowaniu po potwierdzonym wylogowaniu lub utracie/wygaśnięciu sesji.
 - Zaufaniem zarządza backend przez cookie `soma_trusted_browser` (`HttpOnly`); frontend nie zapisuje go w `localStorage` ani `sessionStorage`. W jednym profilu jest jeden bieżący token; ponowna zgoda zastępuje poprzedni, nie usuwa zaufania innych profili. Nie ma panelu urządzeń.
-- Wylogowanie usuwa zaufanie tego profilu także przy wygasłej sesji. Zmiana/reset hasła unieważnia zaufania wszystkich profili. Opcja jest dostępna dla wszystkich ról, także staff/admin/superuser; formularz Django `/admin/` pozostaje bez zmian.
-- Jeśli żądanie wylogowania nie zostanie potwierdzone, lokalny token i tak jest usuwany, lecz zaufanie na serwerze mogło pozostać. Użyj przycisku „Ponów wylogowanie”; dopiero `200` lub `401` z `meta.is_authenticated: false` jest traktowane jako potwierdzenie.
+- Wylogowanie kończy sesję i usuwa lokalny token z przeglądarki, lecz zachowuje cookie i rekord zaufania, także przy wygasłej sesji; nie usuwa ani nie rotuje zaufania. Do końca pierwotnego TTL ten sam profil nadal wymaga prawidłowego hasła i pomija wyłącznie OTP. Zmiana/reset hasła unieważnia zaufania wszystkich profili; wygaśnięcie również wymusza OTP. Opcja jest dostępna dla wszystkich ról, także staff/admin/superuser; formularz Django `/admin/` pozostaje bez zmian.
+- Jeśli żądanie wylogowania nie zostanie potwierdzone, lokalny token i tak jest usuwany, lecz sesja serwerowa może pozostać aktywna. Użyj przycisku „Ponów wylogowanie”; dopiero `200` lub `401` z `meta.is_authenticated: false` jest traktowane jako potwierdzenie zakończenia sesji, nie cofnięcia zaufania.
 
-Nie jest to gwarancja pełnego bezpieczeństwa: skopiowane cookie przed cofnięciem zaufania może pomijać OTP w innym profilu (nadal wymaga hasła). Istniejący token DRF pozostaje ważny po logout/resecie hasła; usunięcie go z karty nie unieważnia go na serwerze. Szczegóły cookie, modelu, migracji i ograniczeń: [dokumentacja backendu](../DOC/BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia).
+Nie jest to gwarancja pełnego bezpieczeństwa: skopiowane ważne cookie może pomijać OTP w innym profilu do końca TTL (nadal wymaga poprawnego hasła; zmiana hasła unieważnia zaufanie). Istniejący token DRF pozostaje ważny po logout/resecie hasła; usunięcie go z karty nie unieważnia go na serwerze. Naprawa tego ryzyka pozostaje poza zakresem. Szczegóły cookie, modelu, migracji i ograniczeń: [dokumentacja backendu](../DOC/BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia).
 
 ## Weryfikacja
+
+### Zaufanie po wylogowaniu i konflikt logowania — QA PASS 08.11.2026
+
+Przekazany odbiór: targeted frontend **92 PASS**, pełny frontend **396 PASS, 1 skipped**, build **PASS** z nieblokującym ostrzeżeniem chunk **501.42 kB**, diff-check **PASS**. Backend w głównym środowisku: `users` **103 OK**, ostatni contract **29 OK**. Niezależne QA **bez blockerów**; własne uruchomienie backendu przez agenta QA było zablokowane wersją allauth w jego środowisku, ale główne testy backendu wykonano poprawnie.
+
+Nie wykonano testu w realnym Chrome z natywnym autofill; pusty stan początkowy aplikacji nie gwarantuje pustych pól po autofill. Google poza zakresem. Wyniki pochodzą z QA, nie ponownego przebiegu przy aktualizacji dokumentacji. Poniższe wcześniejsze odbiory, w tym pełne przebiegi z 7 błędami auth/sesji, pozostają historyczne i nie opisują aktualnego wyniku pełnego frontendu.
 
 ### Edytor wersji: struktura i szczegóły — niezależne QA PASS 08.11.2026
 
@@ -212,6 +224,8 @@ Niezależne QA zakończyło się **PASS bez blockerów** po trzech poprawkach P2
 Nie wykonano rzeczywistego E2E w przeglądarce ani ręcznego odbioru responsywności mobilnej, zoomu, kontrastu lub czytnika ekranu. Wynik nie jest pełnym audytem dostępności.
 
 ### Zaufana przeglądarka — QA 30.10.2026
+
+Historyczny odbiór pierwotnej implementacji; ówczesne cofanie zaufania przy logout zastąpiono zachowaniem opisanym w aktualizacji 08.11.2026.
 
 Przekazane niezależne QA: PASS, bez blockerów; testy celowane 21 OK, ponowiony pełny zestaw 143 zaliczone i 1 pominięty, build OK. Pierwszy pełny przebieg miał 142 zaliczone, 1 niepowodzenie i 1 pominięty z powodu istniejącego flaky P3 w `tests/courses/guard-and-courses.test.jsx:87` („finish nie funkcja”), identycznego na bazowym HEAD; izolowane 14 testów przeszło. Nie naprawiano go w tym zakresie.
 

@@ -101,6 +101,7 @@ describe('trusted browser opt-in at the OTP step', () => {
     expect(checkbox).toHaveAccessibleDescription(/od potwierdzenia/i)
     expect(checkbox).toHaveAccessibleDescription(/hasło.*wymagane/i)
     expect(checkbox).toHaveAccessibleDescription(/nie przedłuża/i)
+    expect(checkbox).toHaveAccessibleDescription(/wylogowanie kończy sesję.*nie usuwa zaufania/i)
     expect(checkbox).toHaveAccessibleDescription(/współdzielon/i)
   })
 
@@ -331,12 +332,19 @@ describe('logout reliability', () => {
 
     await user.click(screen.getByRole('button', { name: /wyloguj/i }))
 
-    expect(await screen.findByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
+    const loginLink = await screen.findByRole('link', { name: 'Zaloguj się' })
+    expect(loginLink).toBeInTheDocument()
     expect(sessionStorage.getItem('token')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
     const [, options] = deleteCalls(fetchMock)[0]
     expect(options.credentials).toBe('include')
     expect(options.headers['X-CSRFToken']).toBe('test-csrf-token')
+
+    await user.click(loginLink)
+    expect(screen.getByLabelText(/^email$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^hasło$/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^email$/i)).toHaveAttribute('autocomplete', 'username')
+    expect(screen.getByLabelText(/^hasło$/i)).toHaveAttribute('autocomplete', 'current-password')
   })
 
   it.each([
@@ -345,7 +353,7 @@ describe('logout reliability', () => {
     ['a network error', () => new TypeError('Failed to fetch')],
     ['401 still authenticated', () => jsonResponse({ meta: { is_authenticated: true } }, 401)],
     ['401 without meta', () => jsonResponse({}, 401)],
-  ])('clears the local token but reports an unconfirmed trust revocation on %s, and allows a retry', async (_name, failure) => {
+  ])('clears the local token but reports an unconfirmed logout on %s, and allows a retry', async (_name, failure) => {
     sessionStorage.setItem('token', 'student-token')
     const fetchMock = logoutFetch(failure(), loggedOut())
     vi.stubGlobal('fetch', fetchMock)
@@ -356,7 +364,8 @@ describe('logout reliability', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/nie udało się potwierdzić wylogowania/i)
-    expect(alert).toHaveTextContent(/zaufanie tej przeglądarki/i)
+    expect(alert).toHaveTextContent(/sesja może nadal być aktywna/i)
+    expect(alert).toHaveTextContent(/przeglądarka była zapamiętana.*zachowa zaufanie/i)
     expect(sessionStorage.getItem('token')).toBeNull()
     expect(screen.getByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
 

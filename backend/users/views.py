@@ -82,12 +82,7 @@ class RememberBrowserConfirmLoginCodeView(ConfirmLoginCodeView):
 
 
 class TrustedBrowserSessionView(SessionView):
-    """allauth session; logout also revokes this profile's trusted-browser token."""
-
-    def delete(self, request, *args, **kwargs):
-        response = super().delete(request, *args, **kwargs)
-        trusted_browser.revoke(request, response)
-        return response
+    """allauth session; logout does not revoke this profile's trusted-browser token."""
 
 
 class TokenExchangeView(APIView):
