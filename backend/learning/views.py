@@ -52,7 +52,7 @@ class CourseMineListView(generics.ListAPIView):
     serializer_class = ManageCourseSerializer
 
     def get_queryset(self):
-        return services.owned_courses(self.request.user).prefetch_related('tasks')
+        return services.author_courses(self.request.user).prefetch_related('tasks')
 
 
 class CourseMineDetailView(generics.RetrieveAPIView):
@@ -61,7 +61,7 @@ class CourseMineDetailView(generics.RetrieveAPIView):
     serializer_class = ManageCourseSerializer
 
     def get_queryset(self):
-        return services.owned_courses(self.request.user).prefetch_related('tasks')
+        return services.author_courses(self.request.user).prefetch_related('tasks')
 
 
 class CourseStudentsCountView(APIView):
@@ -70,24 +70,24 @@ class CourseStudentsCountView(APIView):
 
     @extend_schema(request=None, responses=StudentsCountSerializer)
     def get(self, request, pk):
-        course = services.get_owned_course(request.user, pk)
+        course = services.get_author_course(request.user, pk)
         count = services.count_active_students(course, request.user)
         return Response({'count': count})
 
 
-class CourseDetailView(generics.RetrieveUpdateAPIView):
+class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated]
     serializer_class = CourseSerializer
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
 
     def get_permissions(self):
-        if self.request.method == 'PATCH':
+        if self.request.method in ('PATCH', 'DELETE'):
             return [permission() for permission in MANAGER_PERMISSIONS]
         return [IsAuthenticated()]
 
     def get_queryset(self):
-        if self.request.method == 'PATCH':
+        if self.request.method in ('PATCH', 'DELETE'):
             return services.owned_courses(self.request.user).prefetch_related('tasks')
         return services.visible_courses(self.request.user).prefetch_related('tasks')
 
@@ -96,7 +96,14 @@ class CourseDetailView(generics.RetrieveUpdateAPIView):
         course = self.get_object()
         serializer = CourseIdentitySerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        course = services.update_course(course, serializer.validated_data)
+        course = services.update_course(course, serializer.validated_data, user=request.user)
+        return Response(ManageCourseSerializer(course).data)
+
+    @extend_schema(request=None, responses={200: ManageCourseSerializer, 204: None})
+    def destroy(self, request, *args, **kwargs):
+        course = services.delete_course(request.user, self.kwargs['pk'])
+        if course is None:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(ManageCourseSerializer(course).data)
 
 
@@ -121,7 +128,7 @@ class CourseRegenerateTokenView(APIView):
     @extend_schema(request=None, responses=ManageCourseSerializer)
     def post(self, request, pk):
         course = services.get_owned_course(request.user, pk)
-        course = services.regenerate_invite_token(course)
+        course = services.regenerate_invite_token(course, user=request.user)
         return Response(ManageCourseSerializer(course).data)
 
 
@@ -161,7 +168,7 @@ class CourseTaskCreateView(APIView):
         serializer = CourseTaskSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
-            course = services.Course.objects.select_for_update().get(pk=course.pk)
+            course = services.lock_owned_course(request.user, course.pk)
             serializer.save(course=course)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -176,17 +183,17 @@ class CourseTaskDetailView(generics.UpdateAPIView, generics.DestroyAPIView):
     def get_queryset(self):
         return CourseTask.objects.filter(
             course_id=self.kwargs['pk'],
-            course__owner=self.request.user,
+            course__in=services.owned_courses(self.request.user),
         )
 
     def perform_update(self, serializer):
         with transaction.atomic():
-            services.Course.objects.select_for_update().get(pk=serializer.instance.course_id)
+            services.lock_owned_course(self.request.user, serializer.instance.course_id)
             serializer.save()
 
     def perform_destroy(self, instance):
         with transaction.atomic():
-            services.Course.objects.select_for_update().get(pk=instance.course_id)
+            services.lock_owned_course(self.request.user, instance.course_id)
             instance.delete()
 
 

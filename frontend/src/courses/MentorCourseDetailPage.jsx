@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { VersionManagementLinks } from './VersionLifecycle.jsx'
 import { stateLabels } from './EditorParts.jsx'
 import { coursesApi } from './api.js'
@@ -8,6 +8,9 @@ import { useCurrentUser, useLoader } from './RequireAuth.jsx'
 import { InstanceControls } from './InstanceParts.jsx'
 import { CycleBoard } from './CycleBoard.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
+import { canManageCourse, isAdmin, wasPublished } from './managementPolicy.js'
+import DeleteCourseButton from './DeleteCourseButton.jsx'
+import ManagementError, { ManagementErrorDetails } from './ManagementError.jsx'
 
 function normalizeHours(value) {
   return value.trim().replace(',', '.')
@@ -26,19 +29,31 @@ export function inviteUrl(token) {
   return `${window.location.origin}/kursy/dolacz/${token}`
 }
 
+function isPublishedAuthorReadOnly(user, course) {
+  return !isAdmin(user) && user.roles.includes('mentor') &&
+    course.owner === user.id && course.visibility === 'public' && wasPublished(course)
+}
+
 export default function MentorCourseDetailPage() {
   const { id } = useParams()
   const user = useCurrentUser()
   const courseId = Number(id)
   const detail = useLoader(async () => {
-    const [course, count, instances] = await Promise.all([
+    const [course, counter, instances] = await Promise.all([
       coursesApi.getMine(id),
-      coursesApi.studentsCount(id),
+      coursesApi.studentsCount(id).then(
+        count => ({ count, error: null }),
+        error => ({ count: null, error }),
+      ),
       coursesApi.listInstances(),
     ])
+    // Only the published author's read-only view can survive a counter error.
+    // Do not infer a total from the list filtered to this instance mentor.
+    if (counter.error && !isPublishedAuthorReadOnly(user, course)) throw counter.error
     return {
       course,
-      count,
+      count: counter.count,
+      countError: counter.error,
       instances: instances.filter((instance) => instance.course === courseId && instance.mentor === user.id),
     }
   }, [id, user.id])
@@ -50,24 +65,29 @@ export default function MentorCourseDetailPage() {
     if (detail.error.kind === 'notFound') {
       return (
         <main className="courses-page page-width">
-          <p className="courses-empty">Nie znaleziono kursu.</p><ErrorMessage>{detail.error.message}</ErrorMessage>
-          <Link className="text-link" to="/kursy/moje">Wróć do moich kursów</Link>
+          <p className="courses-empty">Nie znaleziono kursu.</p><ErrorMessage><ManagementErrorDetails error={detail.error} /></ErrorMessage>
+          <Link className="text-link" to="/kursy/moje">{user.roles.includes('admin') ? 'Wróć do wszystkich kursów' : 'Wróć do moich kursów'}</Link>
         </main>
       )
     }
     return (
       <main className="courses-page page-width">
-        <ErrorMessage onRetry={detail.reload}>Nie udało się wczytać kursu. {detail.error.message}</ErrorMessage>
+        <ErrorMessage onRetry={detail.reload}>Nie udało się wczytać kursu. <ManagementErrorDetails error={detail.error} /></ErrorMessage>
       </main>
     )
   }
 
-  return <CourseManagement courseId={courseId} data={detail.data} setData={detail.setData} />
+  return <CourseManagement courseId={courseId} data={detail.data} setData={detail.setData} onReload={detail.reload} />
 }
 
-function CourseManagement({ courseId, data, setData }) {
-  const { course, count, instances } = data
+function CourseManagement({ courseId, data, setData, onReload }) {
+  const { course, count, countError, instances } = data
+  const user = useCurrentUser()
+  const navigate = useNavigate()
+  const manageable = canManageCourse(user, course)
+  const readOnly = isPublishedAuthorReadOnly(user, course)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
   const [busy, setBusy] = useState(false)
 
   async function run(action) {
@@ -76,7 +96,7 @@ function CourseManagement({ courseId, data, setData }) {
     try {
       await action()
     } catch (actionError) {
-      setError(actionError.message)
+      setError(actionError)
     } finally {
       setBusy(false)
     }
@@ -123,18 +143,27 @@ function CourseManagement({ courseId, data, setData }) {
           {!course.is_active && ' · nieaktywny'}
         </p>
         <h1>{course.working_version?.title || course.current_published_version?.title || course.title || 'Kurs bez tytułu'}</h1>
-        <div className="course-actions">
+        {manageable && <div className="course-actions">
           <button type="button" className="button button-secondary" disabled={busy} onClick={() => patchCourse({ is_active: !course.is_active })}>
             {course.is_active ? 'Dezaktywuj' : 'Reaktywuj'}
           </button>
-        </div>
+          <DeleteCourseButton course={course} disabled={busy} onError={setError} onResult={updated => {
+            if (updated) {
+              setData(current => ({ ...current, course: { ...current.course, ...updated } }))
+              setNotice('Zarchiwizowano kurs. Istniejące instancje zachowano.')
+            } else {
+              navigate('/kursy/moje', { state: { courseNotice: 'Trwale usunięto kurs.' } })
+            }
+          }} />
+        </div>}
       </header>
 
-      {error && <p className="courses-error" role="alert">{error}</p>}
+      <ManagementError error={error} />
+      {notice && <p role="status">{notice}</p>}
 
       <VersionManagementLinks course={course} onError={setError} />
 
-      {course.visibility === 'private' && course.invite_token && (
+      {manageable && course.visibility === 'private' && course.invite_token && (
         <InviteLink
           token={course.invite_token}
           busy={busy}
@@ -145,7 +174,7 @@ function CourseManagement({ courseId, data, setData }) {
         />
       )}
 
-      <TasksSection
+      {manageable ? <TasksSection
         course={course}
         busy={busy}
         onAdd={(task) => run(async () => {
@@ -170,11 +199,13 @@ function CourseManagement({ courseId, data, setData }) {
           const fresh = await coursesApi.getMine(courseId)
           setData((current) => ({ ...current, course: fresh }))
         })}
-      />
+      /> : <section className="course-section"><h2>Plan godzinowy</h2><p>Po publikacji kursu publicznego zarządzanie przejmuje administrator.</p></section>}
 
       <section className="course-section" aria-labelledby="students-title">
         <h2 id="students-title">Uczniowie</h2>
-        <p className="students-counter">Aktywni uczniowie: {count}</p>
+        {countError ? <ErrorMessage onRetry={onReload}>
+          Nie udało się wczytać liczby aktywnych uczniów. <ManagementErrorDetails error={countError} />
+        </ErrorMessage> : <p className="students-counter">Aktywni uczniowie: {count}</p>}
         {instances.length === 0 && <EmptyMessage>Nie ma jeszcze uczniów w tym kursie.</EmptyMessage>}
         <ul className="student-list">
           {instances.map((instance) => (
@@ -186,15 +217,15 @@ function CourseManagement({ courseId, data, setData }) {
                 <Link className="text-link" to={`/kursy/instancje/${instance.id}`}>
                   Otwórz tablicę ucznia nr {instance.student}
                 </Link>
-                <InstanceControls
+                {!readOnly && <InstanceControls
                   instance={instance}
                   busy={busy}
                   onClose={() => changeInstance(instance, coursesApi.closeInstance)}
                   onResume={() => changeInstance(instance, coursesApi.resumeInstance)}
-                />
+                />}
                 <CycleBoard
                   instance={instance}
-                  canEdit={instance.status === 'active'}
+                  canEdit={!readOnly && instance.status === 'active'}
                   busy={busy}
                   onTaskChange={(task, changes) => changeTaskStatus(instance, task, changes)}
                 />

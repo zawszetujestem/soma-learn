@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
-  COURSE_PUBLIC, MENTOR, currentPath, created, fail, mockApi, ok, renderApp, resetTestEnv, sessionAs,
+  COURSE_PUBLIC, MENTOR, ADMIN, currentPath, created, fail, mockApi, ok, renderApp, resetTestEnv, sessionAs,
 } from './helpers.jsx'
 
 import { editorApi, version, manage, editorPath } from './version-fixtures.jsx'
@@ -300,9 +300,9 @@ describe('szczegóły kursu mentora (AC-22, AC-50)', () => {
     expect(await screen.findByDisplayValue(/new456/)).toBeInTheDocument()
   })
 
-  it('edycja publikacji tworzy osobny draft i nie zmienia tożsamości kursu', async () => {
+  it('admin tworzy osobny draft cudzej publikacji i nie zmienia tożsamości kursu', async () => {
     const PUBLIC_MINE={...MINE_COURSE,visibility:'public',current_published_version:1,working_version:null}
-    const {calls}=setup({'GET /api/courses/mine/5/':ok(PUBLIC_MINE),'POST /api/courses/5/versions/':created(version)})
+    const {calls}=setup({...sessionAs(ADMIN),'GET /api/courses/mine/5/':ok(PUBLIC_MINE),'POST /api/courses/5/versions/':created(version)})
     const user=userEvent.setup();renderApp('/kursy/moje/5')
     await user.click(await screen.findByRole('button',{name:'Utwórz nową wersję'}))
     await waitFor(()=>expect(currentPath()).toBe('/kursy/moje/5/wersje/2/edytuj'))

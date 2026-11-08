@@ -4,7 +4,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from . import content_services as content
-from .models import (Course, CourseVersion, CourseNode, LessonItem, NodeTest,
+from .models import (CourseVersion, CourseNode, LessonItem, NodeTest,
                      TestQuestion, TestOption, NodePrerequisite)
 from .services import conflict, forbidden
 from .validators import invalid, validate_version_for_publication
@@ -23,7 +23,11 @@ def check_competence(user, course, operation):
     allowed = {
         'submit': owner and course.visibility == 'public' and not owner_admin,
         'withdraw': owner,
-        'publish': owner and (course.visibility == 'private' or owner_admin),
+        'publish': (
+            owner and (course.visibility == 'private' or owner_admin)
+            or user.has_role('admin') and course.visibility == 'public'
+            and course.versions.filter(state='published').exists()
+        ),
         'accept': user.has_role('admin') and course.visibility == 'public' and not owner_admin,
         'reject': user.has_role('admin'),
     }
@@ -42,10 +46,7 @@ def require_complete(version):
 @transaction.atomic
 def transition(user, course_id, version_id, if_match, operation, *, reason=''):
     content.get_version(user, course_id, version_id)
-    course = Course.objects.select_for_update().get(pk=course_id)
-    if not content.can_manage(user, course):
-        from .services import not_found
-        raise not_found()
+    course = content.lock_course(user, course_id)
     version = CourseVersion.objects.select_for_update().get(pk=version_id, course=course)
     version.course = course
     check_competence(user, course, operation)
@@ -78,10 +79,7 @@ def transition(user, course_id, version_id, if_match, operation, *, reason=''):
 @transaction.atomic
 def copy_publication(user, course_id):
     content.get_course(user, course_id)
-    course = Course.objects.select_for_update().get(pk=course_id)
-    if not content.can_manage(user, course):
-        from .services import not_found
-        raise not_found()
+    course = content.lock_course(user, course_id)
     if course.versions.exclude(state='published').exists():
         raise conflict('working_version_exists', 'Kurs ma już wersję roboczą.')
     source = course.current_published_version

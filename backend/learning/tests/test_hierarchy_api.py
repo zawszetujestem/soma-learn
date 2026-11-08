@@ -40,6 +40,7 @@ class HierarchyAPITests(ContentAPICase):
         foreign = CourseNode.objects.create(
             version=other, kind='section', title='foreign', position=1
         )
+        self.client.force_authenticate(self.admin)
         self.error(
             self.write(
                 'post',
@@ -87,8 +88,8 @@ class HierarchyAPITests(ContentAPICase):
             self.version.save()
             self.error(
                 self.write('post', 'nodes/', {'kind': 'section', 'title': 'x'}),
-                409,
-                'invalid_version_state',
+                404 if state == 'published' else 409,
+                'not_found' if state == 'published' else 'invalid_version_state',
             )
         self.version.state = 'rejected'
         self.version.save()

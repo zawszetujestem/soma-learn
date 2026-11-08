@@ -2,14 +2,16 @@ import {afterEach,expect,it} from 'vitest'
 import {screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {mockApi,renderApp,resetTestEnv,ok,fail,MENTOR,ADMIN} from './helpers.jsx'
-import {editorApi,editorPath,V,version} from './version-fixtures.jsx'
+import {editorApi,editorPath,V,version,manage} from './version-fixtures.jsx'
 afterEach(resetTestEnv)
 const previewPath='/kursy/podglad/1/wersje/2'
 const actions=['Wyślij do akceptacji','Wycofaj','Opublikuj','Akceptuj','Odrzuć']
 it.each([editorPath,previewPath])('admin edytuje/podgląda cudzy kurs bez zasobu mine: %s',async path=>{
  const {calls}=mockApi(editorApi({'GET /api/courses/mine/1/':fail(404,{message:'Nie znaleziono.'}),[`PATCH ${V}`]:ok(version)},ADMIN))
  renderApp(path);await screen.findByRole('heading',{name:path===editorPath?'Edytor wersji':'Treść wersji 2'})
- expect(calls.some(c=>c.path==='/api/courses/mine/1/')).toBe(false)
+ expect(calls.some(c=>c.path==='/api/courses/mine/1/')).toBe(true)
+ expect(await screen.findByRole('alert')).toHaveTextContent('404')
+ expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
  expect(screen.queryByRole('link',{name:'Zarządzanie kursem i plan godzinowy'})).not.toBeInTheDocument()
  if(path===editorPath){await userEvent.click(screen.getByRole('button',{name:'Zapisz draft'}));await screen.findByText('Zapisano draft.');expect(calls.find(c=>c.method==='PATCH').headers['If-Match']).toBe('"v2-r1"')}
 })
@@ -33,6 +35,47 @@ it.each([
  mockApi(editorApi({},user,data));renderApp(previewPath)
  await screen.findByRole('heading',{name:'Treść wersji 2'})
  for(const name of actions)expect(Boolean(screen.queryByRole('button',{name}))).toBe(expected.includes(name))
+})
+
+it.each([editorPath,previewPath])('admin nie publikuje pierwszej cudzej publicznej wersji: %s',async path=>{
+ const first={...version,number:1}
+ const {calls}=mockApi(editorApi({},ADMIN,first))
+ renderApp(path)
+ await screen.findByRole('heading',{name:path===editorPath?'Edytor wersji':'Treść wersji 1'})
+ expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
+ expect(calls.every(c=>c.method==='GET')).toBe(true)
+})
+
+it('pierwsza cudza publikacja admina przechodzi przez akceptację zgłoszenia',async()=>{
+ const first={...version,number:1,state:'submitted'}
+ const {calls}=mockApi(editorApi({[`POST ${V}accept/`]:ok({...first,state:'published'})},ADMIN,first))
+ renderApp(previewPath)
+ const user=userEvent.setup()
+ await user.click(await screen.findByRole('button',{name:'Akceptuj'}))
+ expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
+ await screen.findByText('Zapisano zmiany.')
+ expect(calls.find(c=>c.method==='POST').path).toBe(`${V}accept/`)
+})
+
+it.each([
+ [editorPath,{versions:[{...version,id:1,number:1,state:'published'},version]}],
+ [previewPath,{versions:[{...version,id:1,number:1,state:'published'},version]}],
+ [previewPath,{current_published_version:1}],
+])('admin publikuje wersję 2+ tylko z potwierdzoną historią: %s',async(path,history)=>{
+ const course={...manage,...history}
+ const {calls}=mockApi(editorApi({'GET /api/courses/mine/1/':ok(course),[`POST ${V}publish/`]:ok(version)},ADMIN))
+ renderApp(path)
+ const user=userEvent.setup()
+ await user.click(await screen.findByRole('button',{name:'Opublikuj'}))
+ await screen.findByText('Zapisano zmiany.')
+ expect(calls.find(c=>c.method==='POST').path).toBe(`${V}publish/`)
+})
+
+it('brak historii nie przyznaje adminowi publish na podstawie samego numeru',async()=>{
+ mockApi(editorApi({},ADMIN,{...version,number:9}))
+ renderApp(previewPath)
+ await screen.findByRole('heading',{name:'Treść wersji 9'})
+ expect(screen.queryByRole('button',{name:'Opublikuj'})).not.toBeInTheDocument()
 })
 it('admin moderuje cudze publiczne zgłoszenie również w edytorze',async()=>{
  const {calls}=mockApi(editorApi({[`POST ${V}reject/`]:ok({...version,state:'rejected'})},ADMIN,{...version,state:'submitted'}))

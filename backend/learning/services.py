@@ -49,8 +49,32 @@ def public_courses():
     ).prefetch_related('tasks', 'current_published_version__nodes')
 
 
+def author_courses(user):
+    """Read-only mine access is independent of mutation competence."""
+    if user.has_role('admin'):
+        return Course.objects.filter(Q(visibility=Course.Visibility.PUBLIC) | Q(owner=user))
+    if user.has_role('mentor'):
+        return Course.objects.filter(owner=user)
+    return Course.objects.none()
+
+
+def get_author_course(user, pk):
+    course = author_courses(user).filter(pk=pk).first()
+    if course is None:
+        raise not_found()
+    return course
+
+
 def owned_courses(user):
-    return Course.objects.filter(owner=user)
+    if user.has_role('admin'):
+        # Keep identity/plan access to private courses owner-only.
+        return Course.objects.filter(Q(visibility=Course.Visibility.PUBLIC) | Q(owner=user))
+    if not user.has_role('mentor'):
+        return Course.objects.none()
+    published = CourseVersion.objects.filter(course=OuterRef('pk'), state='published')
+    return Course.objects.filter(owner=user).annotate(ever_published=Exists(published)).filter(
+        Q(visibility=Course.Visibility.PRIVATE) | Q(ever_published=False)
+    )
 
 
 def get_owned_course(user, pk):
@@ -58,6 +82,39 @@ def get_owned_course(user, pk):
     if course is None:
         raise not_found()
     return course
+
+
+def lock_owned_course(user, pk):
+    # Lock identity BEFORE evaluating publication history. All publication,
+    # content, plan, deletion and join writers use the same course lock.
+    course = Course.objects.select_for_update().filter(pk=pk).first()
+    if course is None or not owned_courses(user).filter(pk=pk).exists():
+        raise not_found()
+    return course
+
+
+@transaction.atomic
+def delete_course(user, pk):
+    course = lock_owned_course(user, pk)
+    if course.instances.exists():  # Includes CLOSED historical instances.
+        course.is_active = False
+        course.save(update_fields=['is_active', 'updated_at'])
+        return course
+
+    from .asset_services import delete_course_files
+    from .models import NodePrerequisite
+    files = [(asset.file.storage, asset.file.name) for asset in course.assets.all()]
+    # Explicit order resolves PROTECT without weakening global FK safety.
+    course.current_published_version = None
+    course.save(update_fields=['current_published_version', 'updated_at'])
+    NodePrerequisite.objects.filter(target__version__course=course).delete()
+    course.versions.all().delete()
+    course.assets.all().delete()
+    course.delete()
+    # Never remove physical files before a successful commit. The existing
+    # untracked-file cleanup handles a crash or failed storage deletion.
+    transaction.on_commit(lambda: delete_course_files(files))
+    return None
 
 
 def get_readable_instance(user, pk):
@@ -97,7 +154,9 @@ def create_course(user, *, visibility, title='', description='', scope_id=None, 
     return course
 
 
-def update_course(course, data):
+@transaction.atomic
+def update_course(course, data, *, user):
+    course = lock_owned_course(user, course.pk)
     for field, value in data.items():
         setattr(course, field, value)
     course.save()
@@ -112,7 +171,9 @@ def resubmit_course(course, user, if_match):
     return transition(user, course.pk, version.pk, if_match, 'submit')
 
 
-def regenerate_invite_token(course):
+@transaction.atomic
+def regenerate_invite_token(course, *, user):
+    course = lock_owned_course(user, course.pk)
     if course.visibility != Course.Visibility.PRIVATE:
         raise conflict('course_not_private', 'Link zaproszenia dotyczy wyłącznie kursów prywatnych.')
     course.invite_token = secrets.token_urlsafe(32)
@@ -148,7 +209,9 @@ def _join(user, course, *, via_token):
 
     with transaction.atomic():
         get_user_model().objects.select_for_update().get(pk=user.pk)
-        course = Course.objects.select_for_update().get(pk=course.pk)
+        course = Course.objects.select_for_update().filter(pk=course.pk).first()
+        if course is None:
+            raise not_found()
 
         if not is_owner:
             if course.current_published_version_id is None:

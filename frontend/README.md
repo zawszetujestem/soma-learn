@@ -64,13 +64,23 @@ Podglądy graficzne ABC usunięto w całości. `/wzory/*` wyświetla „Tej stro
 - `/nauka` — panel „Moja nauka” dostępny po zalogowaniu; pokazuje własne aktywne instancje ucznia i historię zamkniętych. Nie pokazuje kursów, w których użytkownik jest wyłącznie mentorem.
 - `/kursy/{id}` — szczegóły kursu i dołączanie.
 - `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja z treścią wersji przypiętej przy dołączeniu, zadaniami planu, backlogiem i tablicą cyklu.
-- `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — lista kursów mentora/admina, utworzenie kursu z wersją 1 w stanie roboczym oraz zarządzanie kursami/planem godzinowym.
-- `/kursy/moje/{id}/wersje/{versionId}/edytuj` — edycja wersji roboczej lub odrzuconej; zapis korzysta z ETag/`If-Match`.
+- `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — mentor widzi własne kursy; admin wszystkie publiczne i własne private (nie cudze private). Tworzenie wymaga mentor/admin, tworzy wersję 1 roboczą; admin tylko publiczne. Zarządzanie kursem/planem zależy od uprawnień, autor publicznego po publikacji zachowuje widok read-only.
+- `/kursy/moje/{id}/wersje/{versionId}/edytuj` — edycja wersji roboczej lub odrzuconej tylko z prawem mutacji; zapis korzysta z ETag/`If-Match`. Autor publicznego po publikacji widzi pełną treść read-only zamiast formularzy zapisu.
 - `/kursy/podglad/{id}/wersje/{versionId}` — podgląd SPA dla mentora/admina, w tym przełącznik pełnego podglądu i „Oczami ucznia”; moderator może zaakceptować/odrzucić zgłoszenie.
 - `/course-moderation/` — kolejka moderacji administratora.
 - Pełny opis modeli, lifecycle, endpointów, kodów błędów, migracji i storage: `../DOC/BACKEND.md`.
 
-Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować kurs prywatny albo zgłosić publiczny do moderacji; edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji; jego zadania i zależności są kopiowane do instancji przy dołączeniu i nie aktualizują się później.
+Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować własny prywatny albo zgłosić publiczny do moderacji; odrzuconą wersję publiczną może ponownie zgłosić przed pierwszą publikacją. Edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji; jego zadania i zależności są kopiowane do instancji przy dołączeniu i nie aktualizują się później.
+
+### Zarządzanie kursem i uprawnienia — 08.11.2026
+
+Od pierwszej wersji `published` mentor-autor publicznego kursu traci wszystkie mutacje kursu, planu, wersji/treści i zasobów, zachowując autorstwo, szczegóły, licznik i podglądy read-only. Historyczna publikacja nadal blokuje zapis po dezaktywacji lub bez bieżącego wskaźnika. Application admin (rola `admin`, nie sam staff/superuser) zarządza publicznymi kursami i może tworzyć szkice oraz bezpośrednio publikować kolejne wersje. Cudzą pierwszą wersję mentor nadal zgłasza do akceptacji/moderacji; admin nie może użyć dla niej bezpośredniego `publish`. Dotychczasowe backendowe uprawnienia admina do treści cudzych private pozostają zachowane, choć nie trafiają one do `mine`.
+
+UI ustala mutacje z roli, ownera i historii publikacji — sam numer wersji nie dowodzi publikacji. Jeśli wymagane dane historii nie zostaną pobrane, pokazuje błąd i nie oferuje zależnych mutacji; podgląd zachowuje dostępną treść. Licznik to aktywne instancje z bieżącym użytkownikiem jako mentorem, nie suma uczniów kursu. Read-only autora zachowuje widok także przy błędzie licznika, pokazując błąd bez wymyślania wartości z listy instancji.
+
+„Usuń kurs” wymaga potwierdzenia. Przy dowolnej instancji, także zamkniętej, DELETE zwraca `200 ManageCourse` i archiwizuje (`is_active=false`): strona zostaje otwarta z komunikatem, historia/treść/instancje pozostają, nowe join są zabronione. Bez instancji DELETE trwale usuwa kurs wraz z wersjami, treścią i zasobami (`204`), a UI wraca do `/kursy/moje` z komunikatem. Błędy uprawnień są widoczne: brak dostępu/mutacja autora po publikacji `404 not_found`, niedozwolony pierwszy `publish` admina `403 forbidden`; kontrakt pozostałych błędów w [BACKEND.md](../DOC/BACKEND.md#błędy-api).
+
+Mentor przypisany do instancji nie zmienia się. Widok zarządzania autora po publikacji nie pokazuje kontrolek zapisu instancji, ale przypisany mentor zachowuje obsługę przez `/kursy/instancje/{id}` i API; read-only kursu nie odbiera uprawnień instancji.
 
 ### Moja nauka, backlog i cykle — QA PASS 01.11.2026
 
@@ -115,6 +125,12 @@ Na etapie wpisania kodu dostępny jest domyślnie niezaznaczony checkbox „Zapa
 Nie jest to gwarancja pełnego bezpieczeństwa: skopiowane cookie przed cofnięciem zaufania może pomijać OTP w innym profilu (nadal wymaga hasła). Istniejący token DRF pozostaje ważny po logout/resecie hasła; usunięcie go z karty nie unieważnia go na serwerze. Szczegóły cookie, modelu, migracji i ograniczeń: [dokumentacja backendu](../DOC/BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia).
 
 ## Weryfikacja
+
+### Zarządzanie i usuwanie kursów — niezależne QA PASS 08.11.2026
+
+Przekazany odbiór: **PASS bez blockerów**, testy `npm.cmd test -- tests/courses` — **214 PASS**, management + version-access — **48 PASS**, build PASS; backend **354 OK**, migracje bez zmian i diff-check clean. Nie uruchamiano ich ponownie przy aktualizacji dokumentacji; szczegóły [BACKEND.md](../DOC/BACKEND.md#zarządzanie-i-usuwanie-kursów--qa-pass-08112026).
+
+Audyt ryzyka bez blockerów nie oznacza braku ryzyk: wcześniejszych 7 auth/navigation failures nie ponawiano i nie powiązano z tą zmianą, więc nie potwierdzono zielonego pełnego frontendu. Brak pełnego screen reader/E2E; kolejności TDD nie dało się niezależnie zweryfikować. Nadal potrzebne okresowe `cleanup_course_assets` po stronie backendu.
 
 ### Styl widoków produkcyjnych — niezależne CODE QA PASS 31.10.2026
 

@@ -72,7 +72,7 @@ export default function CoursesPage() {
         <p className="eyebrow">Przestrzeń kursów</p>
         <h1>Kursy</h1>
         {isManager(user) && <Link className="button button-primary" to="/kursy/moje/nowy">Utwórz nowy</Link>}
-        {isManager(user) && <Link className="text-link" to="/kursy/moje">Moje kursy</Link>}
+        {isManager(user) && <Link className="text-link" to="/kursy/moje">{user.roles.includes('admin') ? 'Wszystkie kursy' : 'Moje kursy'}</Link>}
         {user.roles.includes('admin') && <Link className="text-link" to="/course-moderation/">Moderacja kursów</Link>}
         {student && <Link className="text-link" to="/nauka">Moja nauka</Link>}
       </header>

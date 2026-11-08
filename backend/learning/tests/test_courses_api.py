@@ -135,7 +135,7 @@ class CoursesApiTests(TestCase):
         self.assertNotIn('invite_token', response.data)
 
     def test_mine_lists_only_own_courses_for_mentor(self):
-        mine = make_course(self.mentor, title='Moj')
+        mine = make_course(self.mentor, title='Moj', status=Course.ApprovalStatus.PENDING)
         make_course(self.other_mentor, title='Cudzy')
         self.as_user(self.mentor)
         response = self.client.get('/api/courses/mine/')
@@ -159,7 +159,7 @@ class CoursesApiTests(TestCase):
         self.assertEqual(self.client.get(f'/api/courses/mine/{course.pk}/').status_code, 404)
 
     def test_owner_patch_content_requires_version_endpoint(self):
-        course = make_course(self.mentor)
+        course = make_course(self.mentor, visibility=Course.Visibility.PRIVATE)
         self.as_user(self.mentor)
         response = self.client.patch(f'/api/courses/{course.pk}/', {'title': 'Nowy'}, format='json')
         self.assertEqual(response.status_code, 400)
@@ -168,7 +168,7 @@ class CoursesApiTests(TestCase):
         self.assertEqual(course.approval_status, 'approved')
 
     def test_owner_patch_is_active_keeps_approval(self):
-        course = make_course(self.mentor)
+        course = make_course(self.mentor, visibility=Course.Visibility.PRIVATE)
         self.as_user(self.mentor)
         response = self.client.patch(f'/api/courses/{course.pk}/', {'is_active': False}, format='json')
         self.assertEqual(response.status_code, 200)
@@ -176,7 +176,7 @@ class CoursesApiTests(TestCase):
         self.assertFalse(response.data['is_active'])
 
     def test_patch_visibility_is_rejected(self):
-        course = make_course(self.mentor)
+        course = make_course(self.mentor, status=Course.ApprovalStatus.PENDING)
         self.as_user(self.mentor)
         response = self.client.patch(f'/api/courses/{course.pk}/', {'visibility': 'private'}, format='json')
         self.assertEqual(response.status_code, 400)
@@ -215,12 +215,12 @@ class CoursesApiTests(TestCase):
         self.assertEqual(response.data['working_version']['state'], 'submitted')
         self.assertEqual(response.data['approval_status'], 'rejected')
 
-    def test_resubmit_approved_course_gives_conflict(self):
+    def test_resubmit_published_public_course_denies_historical_owner(self):
         course = make_course(self.mentor)
         self.as_user(self.mentor)
         response = self.client.post(f'/api/courses/{course.pk}/resubmit/')
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data['code'], 'course_not_rejected')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'not_found')
 
     def test_resubmit_by_non_owner_is_not_found(self):
         rejected = make_course(self.mentor, status=Course.ApprovalStatus.REJECTED)
@@ -236,7 +236,7 @@ class CoursesApiTests(TestCase):
         self.assertNotEqual(response.data['invite_token'], old)
 
     def test_regenerate_token_on_public_course_conflicts(self):
-        course = make_course(self.mentor)
+        course = make_course(self.mentor, status=Course.ApprovalStatus.PENDING)
         self.as_user(self.mentor)
         response = self.client.post(f'/api/courses/{course.pk}/regenerate-token/')
         self.assertEqual(response.status_code, 409)
@@ -265,7 +265,7 @@ class CourseTasksApiTests(TestCase):
         self.mentor = make_user('mentor@example.com', 'mentor')
         self.other_mentor = make_user('other@example.com', 'mentor')
         self.student = make_user('student@example.com', 'student')
-        self.course = make_course(self.mentor)
+        self.course = make_course(self.mentor, visibility=Course.Visibility.PRIVATE)
         self.client = APIClient()
         self.client.force_authenticate(user=self.mentor)
 

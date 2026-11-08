@@ -1,5 +1,6 @@
 """Private assets, course-wide quotas and recoverable physical deletion."""
 
+import logging
 from pathlib import Path
 
 from django.conf import settings
@@ -11,6 +12,17 @@ from .content_serializers import asset_data
 from .models import Course, CourseAsset, Instance
 from .services import conflict, not_found
 from .storage import course_asset_path
+
+logger = logging.getLogger(__name__)
+
+
+def delete_course_files(files):
+    """Called only after DB commit; orphan cleanup recovers interrupted I/O."""
+    for storage, name in files:
+        try:
+            storage.delete(name)
+        except OSError:
+            logger.warning('Course file deletion deferred; run cleanup_course_assets.')
 
 
 def storage_limit():
@@ -64,9 +76,7 @@ def list_assets(course):
 def delete_asset(user, course_id, asset_id):
     content.get_course(user, course_id)
     with transaction.atomic():
-        course = Course.objects.select_for_update().get(pk=course_id)
-        if not content.can_manage(user, course):
-            raise not_found()
+        course = content.lock_course(user, course_id)
         asset = course.assets.filter(pk=asset_id).first()
         if asset is None:
             raise not_found()
@@ -81,7 +91,8 @@ def delete_asset(user, course_id, asset_id):
 
 def finalize_delete(course_id, asset_id):
     with transaction.atomic():
-        Course.objects.select_for_update().get(pk=course_id)
+        if Course.objects.select_for_update().filter(pk=course_id).first() is None:
+            return
         asset = CourseAsset.objects.filter(
             pk=asset_id, course_id=course_id, state='pending_delete'
         ).first()
@@ -95,7 +106,7 @@ def downloadable_asset(user, course_id, version_id, asset_id):
     if course is None:
         raise not_found()
     allowed = (
-        content.can_manage(user, course)
+        content.can_read_authoring(user, course)
         or Instance.objects.filter(
             Q(student=user) | Q(mentor=user),
             course=course,

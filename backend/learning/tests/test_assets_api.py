@@ -170,6 +170,7 @@ class AssetsAPITests(ContentAPICase):
                 image_alt='Alt',
                 position=1,
             )
+            self.client.force_authenticate(self.admin)
             self.assertEqual(self.upload().status_code, 201)
             self.error(self.upload(), 409, 'course_storage_limit_exceeded')
             listing = self.client.get(f'/api/courses/{self.course.pk}/assets/').data

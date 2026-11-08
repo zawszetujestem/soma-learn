@@ -107,6 +107,8 @@ class VersionLifecycleTests(ContentAPICase):
                     response=self.write('post',operation+'/')
                     if state in states:
                         self.assertEqual(response.status_code,200,response.content)
+                    elif state == 'published' and operation in ('submit', 'withdraw'):
+                        self.error(response,404,'not_found')
                     else:
                         self.error(response,409,'invalid_version_state')
 

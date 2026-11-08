@@ -5,6 +5,7 @@ import { approvalLabels, formatHours } from './format.js'
 import { isStudent, useCurrentUser, useLoader } from './RequireAuth.jsx'
 import { activeInstanceOf, ActiveCourseNotice, JoinCourseButton } from './CoursesPage.jsx'
 import { ErrorMessage, LoadingMessage } from './StateViews.jsx'
+import { canManageCourse } from './managementPolicy.js'
 
 export default function CourseDetailPage() {
   const { id } = useParams()
@@ -39,7 +40,7 @@ export default function CourseDetailPage() {
 
   const { course, instances } = detail.data
   const active = student ? activeInstanceOf(instances, user, course.id) : null
-  const isOwner = course.owner === user.id
+  const manageable = canManageCourse(user, course)
 
   return (
     <main className="courses-page page-width">
@@ -67,7 +68,7 @@ export default function CourseDetailPage() {
 
       {student && <JoinCourseButton courseId={course.id} disabled={Boolean(active)} />}
       {active && <ActiveCourseNotice instance={active} />}
-      {isOwner && <Link className="text-link" to={`/kursy/moje/${course.id}`}>Zarządzaj kursem</Link>}
+      {manageable && <Link className="text-link" to={`/kursy/moje/${course.id}`}>Zarządzaj kursem</Link>}
     </main>
   )
 }

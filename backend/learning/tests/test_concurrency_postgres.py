@@ -51,6 +51,71 @@ class ConcurrentJoinTests(TransactionTestCase):
             2,
         )
 
+    def test_delete_vs_join_is_serialized_without_deadlock(self):
+        from learning.models import Course
+        from unittest import mock
+        admin = make_user('delete-admin@example.com', 'admin')
+        for via_token in (False, True):
+            for delete_first in (False, True):
+                with self.subTest(via_token=via_token, delete_first=delete_first):
+                    course = make_course(self.mentor, visibility='private' if via_token else 'public')
+                    locked = threading.Event()
+                    release = threading.Event()
+                    results = [None, None]
+                    original_delete = Course.delete
+                    original_create = Instance.objects.create
+
+                    def pause_delete(obj, *args, **kwargs):
+                        locked.set()
+                        if not release.wait(10):
+                            raise RuntimeError('Timed out waiting for join')
+                        return original_delete(obj, *args, **kwargs)
+
+                    def pause_create(*args, **kwargs):
+                        locked.set()
+                        if not release.wait(10):
+                            raise RuntimeError('Timed out waiting for delete')
+                        return original_create(*args, **kwargs)
+
+                    def join():
+                        return (services.join_by_token(self.student, course.invite_token)
+                                if via_token else services.join_course(self.student, course_id=course.pk))
+
+                    def worker(index, callback):
+                        try:
+                            results[index] = callback()
+                        except Exception as exc:
+                            results[index] = exc
+                        finally:
+                            connections.close_all()
+
+                    # Private management retains the owner-only identity policy.
+                    manager = self.mentor if via_token else admin
+                    callbacks = [lambda: services.delete_course(manager, course.pk), join]
+                    first = 0 if delete_first else 1
+                    with mock.patch.object(Course, 'delete', pause_delete) if delete_first else mock.patch(
+                        'learning.services.Instance.objects.create', side_effect=pause_create
+                    ):
+                        a = threading.Thread(target=worker, args=(first, callbacks[first]))
+                        b = threading.Thread(target=worker, args=(1-first, callbacks[1-first]))
+                        a.start()
+                        self.assertTrue(locked.wait(10))
+                        b.start()
+                        release.set()
+                        for thread in (a, b):
+                            thread.join(30)
+                            self.assertFalse(thread.is_alive(), 'Possible deadlock')
+                    if delete_first:
+                        self.assertIsNone(results[0])
+                        self.assertIsInstance(results[1], services.DomainError)
+                        self.assertEqual(results[1].status_code, 404)
+                        self.assertFalse(Course.objects.filter(pk=course.pk).exists())
+                    else:
+                        self.assertIsInstance(results[1], tuple, results)
+                        self.assertIsInstance(results[0], Course, results)
+                        self.assertFalse(results[0].is_active)
+                        self.assertEqual(Instance.objects.filter(course=course).count(), 1)
+
 
 @skipUnlessDBFeature('has_select_for_update')
 class ConcurrentContentTests(TransactionTestCase):
@@ -136,7 +201,7 @@ class ConcurrentVersionLifecycleTests(TransactionTestCase):
         self.course=make_course(self.owner)
         self.v1=self.course.current_published_version
         from learning.version_services import copy_publication
-        self.draft=complete_version(copy_publication(self.owner,self.course.pk))
+        self.draft=complete_version(copy_publication(self.admin,self.course.pk))
 
     def race(self, *callbacks):
         barrier=threading.Barrier(len(callbacks))
@@ -175,6 +240,9 @@ class ConcurrentVersionLifecycleTests(TransactionTestCase):
     def test_accept_vs_withdraw_only_one_decision_succeeds(self):
         from learning import version_services
         from learning.content_services import etag
+        from learning.models import Course
+        Course.objects.filter(pk=self.course.pk).update(current_published_version=None)
+        self.v1.delete()  # First publication: mentor may still withdraw.
         submitted=version_services.transition(self.owner,self.course.pk,self.draft.pk,etag(self.draft),'submit')
         results=self.race(
             lambda: version_services.transition(self.admin,self.course.pk,self.draft.pk,etag(submitted),'accept'),
@@ -182,10 +250,10 @@ class ConcurrentVersionLifecycleTests(TransactionTestCase):
         failures=[r for r in results if isinstance(r,Exception)]
         self.assertEqual(len(failures),1,results)
         self.assertIsInstance(failures[0],services.DomainError)
-        self.assertEqual(failures[0].detail['code'],'invalid_version_state')
+        self.assertIn(failures[0].detail['code'], ['invalid_version_state', 'not_found'])
         self.draft.refresh_from_db();self.course.refresh_from_db()
         self.assertIn(self.draft.state,['published','draft'])
-        self.assertEqual(self.course.current_published_version_id,self.draft.pk if self.draft.state=='published' else self.v1.pk)
+        self.assertEqual(self.course.current_published_version_id,self.draft.pk if self.draft.state=='published' else None)
 
     def test_parallel_draft_creation(self):
         from learning import version_services
@@ -202,6 +270,9 @@ class ConcurrentVersionLifecycleTests(TransactionTestCase):
 
     def test_save_vs_submit_never_overwrites_submitted_content(self):
         from learning import content_services as content, version_services
+        from learning.models import Course
+        Course.objects.filter(pk=self.course.pk).update(current_published_version=None)
+        self.v1.delete()  # This race concerns a mentor's first submission.
         def edit():
             with content.edit_version(self.owner,self.course.pk,self.draft.pk,content.etag(self.draft)) as v:
                 content.update_metadata(v,{'title':'Concurrent edit'})

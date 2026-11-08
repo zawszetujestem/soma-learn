@@ -54,7 +54,7 @@ class ErrorContractTests(TestCase):
         self.client.force_authenticate(self.owner)
         fields = self.check_error(self.client.post('/api/courses/', {'title': 'x' * 201, 'visibility': 'public'}, format='json'), 400, 'validation_error')
         self.assertIn('title', fields)
-        domain = self.check_error(self.client.post(f'/api/courses/{self.course.pk}/resubmit/'), 409, 'course_not_rejected')
+        domain = self.check_error(self.client.post(f'/api/courses/{self.course.pk}/resubmit/'), 404, 'not_found')
         self.assertIn('detail', domain)
 
     def test_parse_and_unsupported_media_type(self):

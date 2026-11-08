@@ -283,25 +283,30 @@ Nowa wersja kursu powstaje jako szkic (`draft`). Edytować można `draft` i `rej
 
 | Operacja | Dozwolony wykonawca i warunek | Wynik |
 |---|---|---|
-| `submit` | Właściciel będący mentorem; kurs publiczny; stan `draft` lub `rejected` | `submitted`; pełna walidacja publikacji |
-| `withdraw` | Właściciel mentora/admin; wersja `submitted` | `draft` |
-| `publish` | Właściciel mentora/admin dla kursu prywatnego; administrator-właściciel kursu publicznego; stan `draft` lub `rejected` | `published`, wskazanie jako bieżącej publikacji |
-| `accept` | Administrator inny niż właściciel; zgłoszona wersja kursu publicznego | `published` po walidacji |
-| `reject` | Administrator; wersja `submitted` | `rejected`, z opcjonalnym uzasadnieniem |
+| `submit` | Właściciel-mentor kursu publicznego, którego właściciel nie ma roli `admin`; przed pierwszą publikacją; stan `draft` lub `rejected` | `submitted`; pełna walidacja publikacji |
+| `withdraw` | Właściciel mentor/admin z prawem mutacji; wersja `submitted` | `draft` |
+| `publish` | Właściciel mentor/admin kursu prywatnego; admin-właściciel publicznego; dowolny admin dla publicznego z historyczną publikacją; stan `draft` lub `rejected` | `published`, wskazanie jako bieżącej publikacji |
+| `accept` | Rola `admin`; zgłoszona wersja publiczna, której właściciel nie ma roli `admin` | `published` po walidacji |
+| `reject` | Rola `admin`; wersja `submitted` | `rejected`, z opcjonalnym uzasadnieniem |
 
-Mentor nie może samodzielnie opublikować kursu publicznego: zgłasza go do moderacji. Administrator przegląda kolejkę przez `GET /api/course-moderation/`, a akceptację/odrzucenie wykonuje przez API albo akcje Django admin na wersjach. Admin udostępnia bezpośredni link do podglądu SPA; nie edytuje treści kursu przez formularz admina. Administrator tworzy wyłącznie kursy publiczne; konto łączące role mentora i administratora podlega regułom administratora. Kurs prywatny może opublikować jego właściciel.
+Tworzenie nadal wymaga roli mentor lub admin. Administrator tworzy wyłącznie kursy publiczne; konto łączące role mentora i administratora podlega regułom administratora. Uprawnienia aplikacyjne wynikają z roli `admin`, nie z samego `is_staff`/`is_superuser`. Kurs prywatny może opublikować jego właściciel.
+
+Mentor-autor zarządza publicznym kursem do pierwszej opublikowanej wersji: może edytować, zgłaszać i ponownie zgłosić wersję `rejected`. Od pierwszej publikacji traci wszystkie mutacje kursu publicznego (tożsamość/aktywność, DELETE, plan, wersje, treść, zasoby i lifecycle), ale zachowuje autorstwo i odczyt. Decyduje istnienie dowolnej wersji `published`, także historycznej — dezaktywacja kursu lub brak bieżącego wskaźnika publikacji nie przywracają prawa zapisu. `Course.owner` i mentor przypisany do instancji nie są zmieniani; uprawnienia obsługi instancji pozostają niezależne.
+
+Publicznymi kursami po publikacji zarządza application admin: może skopiować publikację do nowego szkicu, edytować i bezpośrednio publikować kolejne wersje. Cudzej pierwszej wersji nie może opublikować przez `publish`: mentor zgłasza ją, a admin wykonuje `accept`. Administrator przegląda kolejkę przez `GET /api/course-moderation/`, a akceptację/odrzucenie wykonuje przez API albo akcje Django admin na wersjach. Django admin udostępnia link do podglądu SPA; nie edytuje treści przez formularz admina.
 
 ### Spójność edycji: ETag i `If-Match`
 
-Odpowiedzi dotyczące wersji zawierają nagłówek `ETag` (wartość nieprzezroczysta dla klienta, aktualnie w formie `"v{id}-r{revision}"`). Każda mutacja istniejącej wersji (metadane, hierarchia, materiały i upload) oraz każda operacja lifecycle wymaga przesłania aktualnej wartości w `If-Match`. Tworzenie nowego szkicu i operacje na archiwum nieużywanych plików nie zmieniają rewizji i nie wymagają tego nagłówka. Brak nagłówka zwraca `400 revision_required`; nieaktualny ETag — `409 stale_revision`. Klient powinien zachować ETag z odpowiedzi i nie odtwarzać go samodzielnie.
+Odpowiedzi pojedynczych wersji i projekcji zawierają nagłówek `ETag` (wartość nieprzezroczysta dla klienta, aktualnie w formie `"v{id}-r{revision}"`); lista wersji go nie wydaje. Każda mutacja istniejącej wersji (metadane, hierarchia, materiały i upload) oraz każda operacja lifecycle wymaga przesłania aktualnej wartości w `If-Match`. Tworzenie nowego szkicu i operacje na archiwum nieużywanych plików nie zmieniają rewizji istniejącej wersji i nie wymagają tego nagłówka. Brak nagłówka zwraca `400 revision_required`; nieaktualny ETag — `409 stale_revision`. Klient powinien zachować ETag z odpowiedzi i nie odtwarzać go samodzielnie.
 
 ### Materiały, pliki i uprawnienia
 
 - Dozwolone pliki: PDF do **20 MB** (`20 000 000` bajtów), JPG/PNG/WebP do **5 MB** (`5 000 000` bajtów), maksymalnie **20 załączników na lekcję** i **1 GB na kurs** (`1 000 000 000` bajtów). MB/GB są dziesiętne. Limit kursu dotyczy przechowywanych plików, także nieużywanych aktualnie przez materiał.
 - Backend waliduje sygnaturę i rzeczywistą zawartość pliku; PDF-y są parsowane, a obrazy dekodowane. To nie jest skan antywirusowy ani gwarancja bezpieczeństwa pliku.
 - `CourseAsset` jest w prywatnym storage (`PRIVATE_MEDIA_ROOT`; bez tej zmiennej lokalizacja domyślna to `backend/private_media`); publiczny URL ani ścieżka do pliku nie są zwracane w JSON. Pobieranie odbywa się wyłącznie przez uwierzytelniony endpoint API, po sprawdzeniu powiązania pliku z daną wersją i uprawnień użytkownika. Nie wystawiać tego katalogu jako statycznych mediów.
-- Właściciel kursu/admin może zarządzać treścią. Podgląd ucznia zwraca projekcję bez kluczy odpowiedzi i bez flag `is_correct`. Właściciel widzi pełną treść oraz klucze. Uczeń lub mentor przypisanej instancji pobiera treść wersji przypiętej do instancji; klucze są dostępne wyłącznie w widoku właściciela/administratora.
-- `python manage.py cleanup_course_assets` ponawia niedokończone usuwanie i usuwa osierocone, nieśledzone pliki starsze niż 24 godziny (próg można zmienić przez `--older-than-hours`). Zalecane okresowe uruchamianie; polecenie nie zastępuje backupu.
+- Odczyt authoring (pełne wersje, walidacja, podgląd i zasoby) przysługuje właścicielowi z rolą mentor oraz adminowi. Autor publicznego kursu zachowuje go po publikacji wyłącznie read-only; mutacje przechodzą na admina. Dotychczasowe uprawnienia admina do treści cudzych kursów prywatnych pozostają zachowane — nie oznacza to dostępu do ich `mine`, tożsamości ani planu.
+- `student-preview` zawsze zwraca projekcję bez kluczy odpowiedzi i flag `is_correct`. Treść przypiętej instancji jest dostępna uczniowi/przypisanemu mentorowi oraz użytkownikom z odczytem authoring; użytkownik z uprawnieniami authoring (także mentor-autor po publikacji) otrzymuje klucze, pozostali — projekcję bez kluczy.
+- `python manage.py cleanup_course_assets` ponawia niedokończone usuwanie i usuwa osierocone, nieśledzone pliki starsze niż 24 godziny (próg można zmienić przez `--older-than-hours`). Należy zapewnić okresowe uruchamianie; polecenie nie zastępuje backupu. Fizyczne pliki kursu usuwanego trwale są kasowane po zatwierdzeniu transakcji; błąd storage lub przerwanie procesu wymaga cleanup.
 
 ### Migracja istniejących danych
 
@@ -335,9 +340,30 @@ Poniższe ścieżki mają prefiks `/api/` i wymagają uwierzytelnienia. Instancj
 
 Odpowiedzi błędów tej rodziny zachowują status HTTP, domenowy `code` i dostępne `detail`, zawierają bezpieczny, niepusty `message` i nie ujawniają wewnętrznych wyjątków. Przykładowe kody to `invalid_prerequisite` (400), `task_blocked`, `no_active_cycle`, `cycle_already_active`, `cycle_not_active`, `instance_closed` i `slot_taken` (409).
 
+### REST API: kursy i zarządzanie
+
+Prefiks `/api/`; wszystkie endpointy wymagają logowania. Tworzenie i rodzina zarządzania wymagają dodatkowo roli mentor/admin. Odczyt `mine` jest niezależny od prawa zapisu: mentor widzi własne kursy, także publiczne po publikacji i nieaktywne; admin widzi wszystkie publiczne (także nieopublikowane/archiwalne) oraz własne private, nie cudze private. Mutacje tożsamości/planu są dostępne adminowi dla publicznych i własnych private, a mentorowi dla własnych private i publicznych przed pierwszą publikacją.
+
+| Metoda | Ścieżka | Opis i odpowiedź |
+|---|---|---|
+| GET | `/courses/` | `200`, lista `CourseSerializer`: wyłącznie aktywne, opublikowane publiczne |
+| POST | `/courses/` | `201 ManageCourseSerializer`; `visibility`, opcjonalne `title`, `description`, `scope_id`, `subject_id`; tworzy wersję 1 `draft`; admin-private: `403 forbidden` |
+| GET | `/courses/mine/`, `/courses/mine/{id}/` | `200`, lista lub obiekt `ManageCourseSerializer`; autor po publikacji zachowuje odczyt |
+| GET | `/courses/mine/{id}/students-count/` | `200 {"count": N}`; aktywne instancje tego kursu z `mentor=request.user`, nie globalna liczba uczniów |
+| GET | `/courses/{id}/` | `200 CourseSerializer`; wymaga bieżącej publikacji; owner czyta własny kurs także nieaktywny; inni według `visible_courses` (aktywny publiczny lub własna instancja; admin wszystkie opublikowane) |
+| PATCH | `/courses/{id}/` | Wyłącznie `is_active`; `200 ManageCourseSerializer`; widoczność niezmienna, metadane treści przez wersję |
+| DELETE | `/courses/{id}/` | Z dowolnym `Instance` (także `closed`): archiwizacja `is_active=false`, `200 ManageCourseSerializer`; bez instancji: fizyczne usunięcie Course, wersji, treści, planu i rekordów zasobów, `204` bez body |
+| POST | `/courses/{id}/resubmit/` | Zgodnościowe ponowne zgłoszenie `rejected`; aktualny `If-Match`; `200 ManageCourseSerializer` i ETag; dla mentora tylko przed pierwszą publikacją |
+| POST | `/courses/{id}/regenerate-token/` | Kurs prywatny; `200 ManageCourseSerializer`; publiczny: `409 course_not_private` |
+| DELETE | `/courses/{id}/tasks/{task_id}/` | Usunięcie zadania planu; `204`; te same uprawnienia mutacji kursu |
+
+`CourseSerializer` zawiera ID ownera i bieżącej publikacji, widoczność, aktywność, zadania, daty oraz tytuł/opis/klasyfikację i `program` z bieżącej publikacji (bez materiałów/testów). `ManageCourseSerializer` dodaje `working_version`, `versions`, `invite_token` i archiwalne `approval_status`; metadane wybiera z wersji roboczej, a przy jej braku z bieżącej publikacji. Nie zwraca flagi prawa zapisu — frontend ustala je z roli, ownera i historii publikacji.
+
+Archiwizacja zachowuje wersje, zasoby, instancje, przypięcia i historię; nie zmienia mentora instancji ani jej uprawnień. Nowe dołączenia są zabronione (`409 course_inactive` dla uprawnionego ucznia z widocznym kursem), również przed sprawdzeniem idempotentnej aktywnej instancji. DELETE nie wymaga `If-Match`. Archiwizacja nie odbiera uprawnionemu managerowi możliwości reaktywacji przez PATCH.
+
 ### REST API: wersjonowana treść
 
-Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesję. Trasy treści wymagają zalogowania, a odczyt/edycja wersji i zasobów kursu — uprawnień właściciela-mentora lub administratora. `course-moderation` jest dostępne administratorowi. Odpowiedzi wersji zawierają `ETag`.
+Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesję. Trasy treści wymagają zalogowania; odczyt authoring i mutacje rozdzielono zgodnie z sekcją „Materiały, pliki i uprawnienia”. Mentor-autor publicznego kursu po pierwszej publikacji może odczytywać wersje, ale nie zapisywać. `course-moderation` jest dostępne roli `admin`. Odpowiedzi pojedynczych wersji/projekcji i przejść lifecycle zawierają `ETag`; lista wersji nie wydaje ETag.
 
 | Metoda | Ścieżka | Opis |
 |---|---|---|
@@ -358,17 +384,19 @@ Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesj�
 | DELETE | `/courses/{course_id}/assets/{asset_id}/` | Usunięcie nieużywanego pliku |
 | GET | `.../assets/{asset_id}/download/` | Prywatne pobranie załącznika należącego do wersji |
 | GET | `/course-moderation/` | Kolejka zgłoszonych wersji dla administratora |
-| GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; bez kluczy dla ucznia i mentora |
+| GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; klucze tylko przy uprawnieniach authoring |
 
-Pozostałe podstawowe endpointy kursów i instancji pozostają dostępne pod `/api/courses/` i `/api/instances/` (tworzenie i lista kursów, dołączanie, lista/odczyt instancji, plan godzinowy i cykl życia instancji). Są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Legacy `POST /api/courses/{id}/resubmit/` pozostaje zgodnościowym endpointem operującym na odrzuconej wersji; nowy klient powinien używać wersjonowanego `.../submit/`.
+Endpointy dołączania i obsługi instancji są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Nowy klient powinien używać wersjonowanego `.../submit/` zamiast zgodnościowego resubmit opisanego wyżej.
 
 ### Błędy API
 
 W rodzinach endpointów kursów, instancji, słowników i moderacji odpowiedzi błędów mają bezpieczny, niepusty `message` i `code`; zachowują także właściwy status HTTP oraz dostępne `detail` i dodatkowe pola, np. `issues` lub `dependencies`. Błędy serwera nie ujawniają wewnętrznych wyjątków. Kody statusów: `400 validation_error`, `401 not_authenticated`, `403 forbidden` (lub `csrf_failed`), `404 not_found`, `405 method_not_allowed`, `409 conflict`, `413 request_too_large`, `415 unsupported_media_type`, `429 throttled`, `500 internal_error`, `503 service_unavailable`. Błędy walidacji plików, treści i zależności planu zachowują kod domenowy, np. `revision_required` (400), `invalid_file`, `file_too_large` (413), `invalid_material`, `invalid_prerequisite`, `version_incomplete`, `classification_invalid`, `attachment_limit_exceeded`; konflikty (409) obejmują m.in. `stale_revision`, `invalid_version_state`, `working_version_exists`, `asset_in_use`, `course_not_approved`, `course_inactive`, `slot_taken`, `task_blocked`, `cycle_already_active`, `instance_closed`.
 
+Brak logowania: `401 not_authenticated`; brak roli mentor/admin na endpointach zarządzania: `403 forbidden`. Brak dostępu do konkretnego kursu lub mutacja mentora publicznego kursu po publikacji: `404 not_found` (także DELETE i lifecycle), nie `403`. Admin próbujący `publish` cudzej pierwszej wersji: `403 forbidden`. Dostęp jest sprawdzany przed ujawnieniem stanu/rewizji; uprawniony klient otrzymuje `409 invalid_version_state`, `400 revision_required` lub `409 stale_revision` zależnie od żądania. Resubmit bez odrzuconej wersji: `409 course_not_rejected`; PATCH widoczności: `400 visibility_immutable`, metadanych treści: `400 version_fields_required`.
+
 ### Trasy frontendu
 
-Trasy kursów wymagają logowania; zarządzanie i edycja wymagają roli mentor/admin.
+Trasy kursów wymagają logowania; wejścia zarządzania/edycji wymagają roli mentor/admin, ale sama rola nie daje prawa mutacji. Autor publicznego kursu po publikacji zachowuje widok read-only.
 
 | Trasa | Widok |
 |---|---|
@@ -377,12 +405,20 @@ Trasy kursów wymagają logowania; zarządzanie i edycja wymagają roli mentor/a
 | `/kursy/{id}` | Szczegóły widocznego kursu i dołączanie |
 | `/kursy/dolacz/{token}` | Dołączenie do kursu prywatnego przez link |
 | `/kursy/instancje/{id}` | Instancja i przypięta treść; obsługa backlogu, tablicy aktywnego cyklu i historii; uczeń oraz przypisany mentor zachowują uprawnienia do obsługi |
-| `/kursy/moje` | Lista kursów mentora/admina |
+| `/kursy/moje` | Mentor: własne; admin: wszystkie publiczne i własne private, bez cudzych private |
 | `/kursy/moje/nowy` | Utworzenie tożsamości kursu i wersji 1 w stanie roboczym |
-| `/kursy/moje/{id}` | Zarządzanie kursem, planem godzinowym, wersjami i tokenem |
-| `/kursy/moje/{id}/wersje/{versionId}/edytuj` | Edytor wersji kursu |
+| `/kursy/moje/{id}` | Zarządzanie kursem/planem/wersjami; autor publicznego po publikacji read-only, z licznikiem i podglądami; DELETE 200 zostaje na stronie z komunikatem archiwizacji, 204 wraca do listy |
+| `/kursy/moje/{id}/wersje/{versionId}/edytuj` | Edycja `draft`/`rejected` tylko z prawem mutacji; bez niego pełna treść read-only, nie formularz zapisu |
 | `/kursy/podglad/{id}/wersje/{versionId}` | Podgląd SPA; przełącznik pełnego widoku i „Oczami ucznia”; moderator może stąd podjąć decyzję |
 | `/course-moderation/` | Kolejka moderacji administratora |
+
+Frontend sprawdza historię publikacji, nie sam numer wersji. Gdy potrzebne dane `mine` nie zostaną pobrane, pokazuje błąd i blokuje zależne mutacje; podgląd może zachować odczytaną treść. Błąd licznika w read-only autora nie jest zastępowany liczbą z listy instancji. Widok zarządzania autora nie udostępnia kontrolek zapisu instancji, ale uprawnienia przypisanego mentora na trasie instancji/API pozostają bez zmian.
+
+### Zarządzanie i usuwanie kursów — QA PASS 08.11.2026
+
+Przekazane niezależne QA: **PASS bez blockerów** dla tej zmiany; nie uruchamiano testów ponownie przy aktualizacji dokumentacji. Backend: `docker exec ... manage.py test learning.tests users.tests --noinput --verbosity 0` — **354 OK**; frontend: `npm.cmd test -- tests/courses` — **214 PASS**, management + version-access — **48 PASS**, build PASS. `makemigrations --check --dry-run` — bez zmian; diff-check clean.
+
+Audyt ryzyka nie wykazał blockerów. Wcześniejszych 7 niepowodzeń auth/navigation nie ponawiano i nie powiązano z tą zmianą — nie jest to potwierdzenie zielonego pełnego frontendu. Nie wykonano pełnego testu screen reader/E2E; kolejności TDD nie dało się niezależnie zweryfikować. Nadal należy zapewnić harmonogram `cleanup_course_assets`; PASS nie usuwa tych ograniczeń.
 
 ### Kursy v1 — ograniczenia i weryfikacja (30.10.2026)
 

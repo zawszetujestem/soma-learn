@@ -88,7 +88,7 @@ export async function request(method, url, body, options = {}) {
       message: courseErrorMessage(response.status, payload),
     })
   }
-  return payload
+  return options.withStatus ? { status: response.status, data: payload } : payload
 }
 
 const get = (url) => request('GET', url)
@@ -104,6 +104,18 @@ export const coursesApi = {
   studentsCount: async (id) => (await get(`/api/courses/mine/${id}/students-count/`)).count,
   createCourse: (data) => post('/api/courses/', data),
   updateCourse: (id, data) => patch(`/api/courses/${id}/`, data),
+  // Preserve HTTP status here: an empty/malformed 200 must not mean deletion.
+  deleteCourse: async (id) => {
+    const { status, data } = await request('DELETE', `/api/courses/${id}/`, undefined, { withStatus: true })
+    if (status === 204) return null
+    if (status !== 200 || data.id !== id || data.is_active !== false) {
+      throw new CourseApiError({
+        kind: 'server', status, code: 'invalid_response',
+        message: 'Nie udało się odczytać wyniku z odpowiedzi serwera. Odśwież listę przed ponowną operacją.',
+      })
+    }
+    return data
+  },
   regenerateToken: (id) => post(`/api/courses/${id}/regenerate-token/`),
   joinCourse: (id) => post(`/api/courses/${id}/join/`),
   joinByToken: (token) => post(`/api/courses/join/${encodeURIComponent(token)}/`),

@@ -24,7 +24,9 @@ class ContentPermissionsTests(ContentAPICase):
                         assert_no_keys(self,preview.data)
                         self.assertIn('secret',str(read.data))
                         write=self.write('patch','',{'title':'Title'})
-                        if state in ['submitted','published']:
+                        if state == 'published' and user == self.owner:
+                            self.error(write,404,'not_found')
+                        elif state in ['submitted','published']:
                             self.error(write,409,'invalid_version_state')
                         else: self.assertEqual(write.status_code,200)
                     else:

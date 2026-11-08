@@ -9,6 +9,7 @@ from learning.tests.helpers import make_course, make_user
 class CycleApiTests(TestCase):
     def setUp(self):
         self.owner = make_user('cycle-owner@example.com', 'mentor')
+        self.admin = make_user('cycle-admin@example.com', 'admin')
         self.student = make_user('cycle-student@example.com', 'student')
         self.other = make_user('cycle-other@example.com', 'student')
         self.course = make_course(self.owner)
@@ -33,7 +34,7 @@ class CycleApiTests(TestCase):
         return self.client.get(self.base).data
 
     def dependencies(self, task, ids):
-        self.client.force_authenticate(self.owner)
+        self.client.force_authenticate(self.admin)
         response = self.client.patch(
             f'/api/courses/{self.course.pk}/tasks/{task.pk}/',
             {'prerequisite_ids': ids}, format='json',
@@ -84,8 +85,8 @@ class CycleApiTests(TestCase):
         self.assert_error(self.dependencies(self.a, [self.c.pk]), 400, 'invalid_prerequisite')
         self.assertEqual(self.a.prerequisites.count(), 0)
 
-    def test_author_create_dependencies_and_unauthorized_edit(self):
-        self.client.force_authenticate(self.owner)
+    def test_admin_create_dependencies_and_unauthorized_edit(self):
+        self.client.force_authenticate(self.admin)
         response = self.client.post(
             f'/api/courses/{self.course.pk}/tasks/',
             {'title': 'D', 'hours': 1, 'prerequisite_ids': [self.a.pk]}, format='json',

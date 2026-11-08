@@ -20,7 +20,6 @@ class CatalogVersionsTests(ContentAPICase):
         self.write('post','submit/')
         self.client.force_authenticate(self.admin)
         self.assertEqual(self.write('post','accept/').status_code,200)
-        self.client.force_authenticate(self.owner)
         response=self.client.post(f'/api/courses/{self.course.pk}/versions/',{},format='json')
         self.assertEqual(response.status_code,201,response.content)
         self.course.versions.filter(pk=response.data['id']).update(title='Secret draft')

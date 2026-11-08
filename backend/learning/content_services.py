@@ -23,14 +23,31 @@ from .services import conflict, not_found
 from .validators import dependency_conflicts, invalid, validate_material
 
 
-def can_manage(user, course):
+def can_read_authoring(user, course):
     return user.has_role('admin') or (
         course.owner_id == user.pk and user.has_role('mentor')
     )
 
 
+def can_manage(user, course):
+    if not can_read_authoring(user, course):
+        return False
+    return (
+        user.has_role('admin')
+        or course.visibility == Course.Visibility.PRIVATE
+        or not course.versions.filter(state=CourseVersion.State.PUBLISHED).exists()
+    )
+
+
 def get_course(user, course_id):
     course = Course.objects.filter(pk=course_id).first()
+    if course is None or not can_read_authoring(user, course):
+        raise not_found()
+    return course
+
+
+def lock_course(user, course_id):
+    course = Course.objects.select_for_update().filter(pk=course_id).first()
     if course is None or not can_manage(user, course):
         raise not_found()
     return course
@@ -58,9 +75,7 @@ def edit_version(user, course_id, version_id, if_match):
         user, course_id, version_id
     )  # Access precedes state/revision disclosure.
     with transaction.atomic():
-        course = Course.objects.select_for_update().get(pk=course_id)
-        if not can_manage(user, course):
-            raise not_found()
+        course = lock_course(user, course_id)
         version = CourseVersion.objects.select_for_update().get(
             pk=version_id, course=course
         )

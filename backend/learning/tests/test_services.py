@@ -240,23 +240,24 @@ class InstanceLifecycleServiceTests(TestCase):
 class CourseManagementServiceTests(TestCase):
     def setUp(self):
         self.owner = make_user('mentor@example.com', 'mentor')
+        self.admin = make_user('manager-admin@example.com', 'admin')
         self.course = make_course(self.owner)
 
     def test_editing_archival_fields_does_not_reverify(self):
-        services.update_course(self.course, {'title': 'Nowy tytul'})
+        services.update_course(self.course, {'title': 'Nowy tytul'}, user=self.admin)
         self.course.refresh_from_db()
         self.assertEqual(self.course.approval_status, Course.ApprovalStatus.APPROVED)
         self.assertEqual(self.course.title, 'Nowy tytul')
 
     def test_unchanged_content_keeps_approval(self):
-        services.update_course(self.course, {'title': self.course.title, 'is_active': False})
+        services.update_course(self.course, {'title': self.course.title, 'is_active': False}, user=self.admin)
         self.course.refresh_from_db()
         self.assertEqual(self.course.approval_status, Course.ApprovalStatus.APPROVED)
         self.assertFalse(self.course.is_active)
 
     def test_editing_private_course_does_not_need_review(self):
         private = make_course(self.owner, visibility=Course.Visibility.PRIVATE, title='Prywatny')
-        services.update_course(private, {'title': 'Zmieniony'})
+        services.update_course(private, {'title': 'Zmieniony'}, user=self.owner)
         private.refresh_from_db()
         self.assertEqual(private.approval_status, Course.ApprovalStatus.APPROVED)
 
@@ -276,13 +277,13 @@ class CourseManagementServiceTests(TestCase):
 
     def test_regenerate_token_only_for_private(self):
         with self.assertRaises(APIException) as ctx:
-            services.regenerate_invite_token(self.course)
+            services.regenerate_invite_token(self.course, user=self.admin)
         self.assertEqual(ctx.exception.detail['code'], 'course_not_private')
 
     def test_regenerate_token_changes_token(self):
         private = make_course(self.owner, visibility=Course.Visibility.PRIVATE, title='Prywatny')
         old = private.invite_token
-        services.regenerate_invite_token(private)
+        services.regenerate_invite_token(private, user=self.owner)
         private.refresh_from_db()
         self.assertNotEqual(private.invite_token, old)
         self.assertTrue(private.invite_token)

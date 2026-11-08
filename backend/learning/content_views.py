@@ -83,7 +83,7 @@ class InstanceContentView(ContentView):
         instance = Instance.objects.select_related('course','course_version__scope','course_version__subject').filter(pk=pk).first()
         if instance is None:
             raise not_found()
-        keys = service.can_manage(request.user, instance.course)
+        keys = service.can_read_authoring(request.user, instance.course)
         if not keys and request.user.pk not in (instance.student_id, instance.mentor_id):
             raise not_found()
         version = instance.course_version
