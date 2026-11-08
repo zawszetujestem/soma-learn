@@ -114,10 +114,11 @@ class InstanceModelTests(TestCase):
         self.course_a = make_course(self.owner)
         self.course_b = make_course(self.owner, title='Drugi kurs')
 
-    def test_student_can_have_only_one_active_instance(self):
+    def test_student_can_have_multiple_courses_but_only_one_active_instance_per_course(self):
         Instance.objects.create(course=self.course_a, course_version=self.course_a.versions.first(), student=self.student)
+        Instance.objects.create(course=self.course_b, course_version=self.course_b.versions.first(), student=self.student)
         with self.assertRaises(IntegrityError), transaction.atomic():
-            Instance.objects.create(course=self.course_b, course_version=self.course_b.versions.first(), student=self.student)
+            Instance.objects.create(course=self.course_a, course_version=self.course_a.versions.first(), student=self.student)
 
     def test_closed_instance_does_not_block_new_active_instance(self):
         Instance.objects.create(course=self.course_a, course_version=self.course_a.versions.first(), student=self.student, status=Instance.Status.CLOSED)

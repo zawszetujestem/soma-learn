@@ -138,7 +138,8 @@ describe('lista kursów dla ucznia (AC-52)', () => {
 })
 
 describe('dołączanie do kursu (AC-30)', () => {
-  it('blokuje dołączenie i pokazuje link do instancji, gdy uczeń ma już aktywny kurs', async () => {
+  it('blokuje dołączenie tylko do kursu z aktywną instancją i pokazuje link do niej', async () => {
+    // Zatwierdzona zmiana: uczeń może mieć jednocześnie aktywne instancje różnych kursów.
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/courses/': ok([COURSE_PUBLIC, COURSE_OPEN]),
@@ -148,9 +149,11 @@ describe('dołączanie do kursu (AC-30)', () => {
     renderApp('/kursy')
 
     await screen.findByRole('heading', { name: COURSE_PUBLIC.title })
-    expect(screen.getByText(/masz już aktywny kurs/i)).toBeInTheDocument()
+    expect(screen.getByText(/uczysz się już tego kursu/i)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /przejdź do swojej instancji/i })).toHaveAttribute('href', '/kursy/instancje/11')
-    screen.getAllByRole('button', { name: /dołącz/i }).forEach((button) => expect(button).toBeDisabled())
+    const [publicJoin, openJoin] = screen.getAllByRole('button', { name: /dołącz/i })
+    expect(publicJoin).toBeEnabled()
+    expect(openJoin).toBeDisabled()
   })
 
   it('po dołączeniu przechodzi do instancji ucznia', async () => {

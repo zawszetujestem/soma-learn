@@ -35,13 +35,13 @@ class JoinApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual([t['title'] for t in response.data['tasks']], ['Lekcja'])
 
-    def test_second_active_course_gives_slot_taken(self):
+    def test_second_active_course_is_allowed(self):
         other = make_course(self.mentor, title='Drugi')
         Instance.objects.create(course=other, course_version=other.versions.first(), student=self.student, mentor=self.mentor)
         self.as_user(self.student)
         response = self.client.post(f'/api/courses/{self.course.pk}/join/')
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data['code'], 'slot_taken')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Instance.objects.filter(student=self.student, status='active').count(), 2)
 
     def test_mentor_without_student_role_cannot_join_others_course(self):
         self.as_user(self.other_mentor)

@@ -61,17 +61,35 @@ Podglądy graficzne ABC usunięto w całości. `/wzory/*` wyświetla „Tej stro
 - Nieznana trasa, w tym `/wzory/*` — NotFound.
 - `/` — zatwierdzona homepage dla ósmoklasistów, z planowaną maturą, przykładami i statycznym preview; bez nowych API.
 - `/kursy` — katalog wyłącznie opublikowanych, aktywnych kursów publicznych; wymaga logowania. Mentor/admin widzi „Utwórz nowy” i „Moje kursy”.
+- `/nauka` — panel „Moja nauka” dostępny po zalogowaniu; pokazuje własne aktywne instancje ucznia i historię zamkniętych. Nie pokazuje kursów, w których użytkownik jest wyłącznie mentorem.
 - `/kursy/{id}` — szczegóły kursu i dołączanie.
-- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja ucznia z treścią wersji przypiętej przy dołączeniu.
+- `/kursy/dolacz/{token}`, `/kursy/instancje/{id}` — dołączenie przez link oraz instancja z treścią wersji przypiętej przy dołączeniu, zadaniami planu, backlogiem i tablicą cyklu.
 - `/kursy/moje`, `/kursy/moje/nowy`, `/kursy/moje/{id}` — lista kursów mentora/admina, utworzenie kursu z wersją 1 w stanie roboczym oraz zarządzanie kursami/planem godzinowym.
 - `/kursy/moje/{id}/wersje/{versionId}/edytuj` — edycja wersji roboczej lub odrzuconej; zapis korzysta z ETag/`If-Match`.
 - `/kursy/podglad/{id}/wersje/{versionId}` — podgląd SPA dla mentora/admina, w tym przełącznik pełnego podglądu i „Oczami ucznia”; moderator może zaakceptować/odrzucić zgłoszenie.
 - `/course-moderation/` — kolejka moderacji administratora.
 - Pełny opis modeli, lifecycle, endpointów, kodów błędów, migracji i storage: `../DOC/BACKEND.md`.
 
-Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować kurs prywatny albo zgłosić publiczny do moderacji; edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji.
+Tworzenie kursu nie publikuje go automatycznie. Kurs składa się z tożsamości i wersji treści. Mentor może opublikować kurs prywatny albo zgłosić publiczny do moderacji; edycja nie powoduje automatycznej reweryfikacji. Wersja instancji jest przypięta i nie zmienia się po późniejszej publikacji nowej wersji. `CourseTask`/plan godzinowy pozostaje niezależny od wersji; jego zadania i zależności są kopiowane do instancji przy dołączeniu i nie aktualizują się później.
 
-Pliki kursu są przechowywane prywatnie i dostępne wyłącznie przez uwierzytelnione API. Limity: PDF ≤20 MB, JPG/PNG/WebP ≤5 MB, maksymalnie 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). Markdown teorii jest renderowany przez `react-markdown` z wyłączonym surowym HTML i walidacją linków. Podgląd ucznia nie ujawnia kluczy odpowiedzi ani poprawności opcji testowych. W v1 nie ma rozwiązywania/oceniania testów, a wymagania wstępne mają charakter informacyjny.
+### Moja nauka, backlog i cykle — QA PASS 01.11.2026
+
+Zalogowany uczeń może mieć aktywne instancje różnych kursów jednocześnie. Ponowne dołączenie do tej samej aktywnej instancji kursu nie tworzy duplikatu. Kurs publiczny musi być aktywny i opublikowany; do kursu prywatnego dołącza się przez link zaproszenia. W tym przepływie nie ma płatności.
+
+Do panelu `/nauka` prowadzą linki z nagłówka (także homepage), katalogu, stron po zalogowaniu i instancji. Panel dzieli własne instancje ucznia na aktywne i historię; karta otwiera tę samą instancję. Tytuł i treść pozostają przypięte do wersji użytej przy dołączeniu.
+
+Na stronie instancji:
+
+- „Rozpocznij cykl” ręcznie otwiera jeden aktywny cykl dla tej instancji. Uczeń wybiera zadania z backlogu przyciskiem „Dodaj do cyklu”; do backlogu może je odłożyć. Cykl nie ma narzuconej długości ani limitu zadań.
+- Tablica aktywnego cyklu grupuje wyłącznie wybrane zadania według statusów „Do zrobienia”, „W trakcie” i „Gotowe”. Backlog pozostaje widoczny obok/poniżej tablicy. Bez aktywnego cyklu wszystkie zadania są w backlogu.
+- Wymagania wstępne planu są jawne i nie mogą tworzyć pętli. Zadanie z niespełnionym wymaganiem pozostaje zablokowane w backlogu; samo odblokowanie nie dodaje go na tablicę. Zmiana ukończonego wymagania na status niedokończony może odłożyć niezakończone, zależne zadania wybrane na tablicę, zachowując ich statusy. Ukończone zadania pozostają ukończone.
+- „Zakończ cykl” zachowuje historię wybranych zadań i ich statusów; zadania wracają do backlogu z zachowanym statusem. Zamknięcie instancji w dowolnym momencie zamyka również aktywny cykl. Wznowienie przywraca tę samą instancję bez automatycznego rozpoczynania nowego cyklu.
+- Uczeń może wybierać zadania, zmieniać statusy, prowadzić cykle oraz zamykać i wznawiać kurs także z przypisanym mentorem. Mentor zachowuje możliwość obsługi instancji. Widok mentora osadza ten sam komponent tablicy i zawiera link do pełnej strony instancji. Panel ucznia pokazuje tylko własne instancje, a nie listę mentorską.
+- Obsługa wykorzystuje natywne kontrolki formularzy i przyciski; tablica nie wymaga przeciągania i upuszczania.
+
+Wymagania wstępne z treści kursu (`NodePrerequisite`) są odrębne i nadal informacyjne; nie są egzekwowane. W v1 nie ma rozwiązywania ani oceniania testów.
+
+Pliki kursu są przechowywane prywatnie i dostępne wyłącznie przez uwierzytelnione API. Limity: PDF ≤20 MB, JPG/PNG/WebP ≤5 MB, maksymalnie 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). Markdown teorii jest renderowany przez `react-markdown` z wyłączonym surowym HTML i walidacją linków. Podgląd ucznia nie ujawnia kluczy odpowiedzi ani poprawności opcji testowych. W v1 nie ma rozwiązywania/oceniania testów; tylko wymagania treści (`NodePrerequisite`) są informacyjne, zależności zadań planu są egzekwowane.
 
 ### Zaufana przeglądarka i wylogowanie
 
@@ -148,6 +166,12 @@ Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG. Powyższa inspe
 Backend SQLite: 316 OK, 8 skip; PostgreSQL: 316/316 OK. `makemigrations --check` nie wykazał zmian, `manage.py check` zwrócił 0 issues. Frontend: 230 passed, 1 skip; build i smoke API OK. Niezależne QA: **POZYTYWNY**. Niestabilny test `join-by-token` (wyścig mocka POST, `finish is not a function`) ustabilizowano synchronizacją w teście; 30/30 przebiegów OK. QA nie zweryfikowało ręcznie responsywności J6 w pełnej przeglądarce.
 
 Walidacja typu i zawartości pliku nie jest skanowaniem antywirusowym. Szczegóły ograniczeń i API: [BACKEND.md](../DOC/BACKEND.md).
+
+### Plan nauki i cykle — odbiór
+
+Niezależne QA zakończyło się **PASS bez blockerów** po trzech poprawkach P2. Testy kursów: **186 PASS**; wybrane 8 plików: **104 PASS**; build PASS. Pełny frontend: **332 PASS / 7 FAIL / 1 SKIP** — 7 niepowodzeń to potwierdzone przedistniejące konflikty testów logowania/sesji/nawigacji/zaufanej przeglądarki, nie przedstawiaj więc pełnego zestawu jako zielonego. Accessibility/keyboard probe w jsdom PASS. TDD funkcji zakończono 80 PASS po RED 42 failed / 38 passed.
+
+Nie wykonano rzeczywistego E2E w przeglądarce ani ręcznego odbioru responsywności mobilnej, zoomu, kontrastu lub czytnika ekranu. Wynik nie jest pełnym audytem dostępności.
 
 ### Zaufana przeglądarka — QA 30.10.2026
 

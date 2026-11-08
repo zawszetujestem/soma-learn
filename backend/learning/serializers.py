@@ -7,15 +7,41 @@ from .progress import calculate_progress
 
 
 class CourseTaskSerializer(serializers.ModelSerializer):
+    prerequisite_ids = serializers.ListField(child=serializers.IntegerField(min_value=1), required=False,
+                                             write_only=True)
+
     class Meta:
         model = CourseTask
-        fields = ['id', 'title', 'hours', 'position']
+        fields = ['id', 'title', 'hours', 'position', 'prerequisite_ids']
         read_only_fields = ['id']
 
     def validate_hours(self, value):
         if value <= 0:
             raise serializers.ValidationError('Liczba godzin musi być dodatnia.')
         return value
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['prerequisite_ids'] = sorted(p.pk for p in instance.prerequisites.all())
+        return data
+
+    def create(self, validated_data):
+        from .services import validate_task_prerequisites
+        ids = validated_data.pop('prerequisite_ids', [])
+        validate_task_prerequisites(validated_data['course'].pk, None, ids)
+        task = super().create(validated_data)
+        task.prerequisites.set(ids)
+        return task
+
+    def update(self, instance, validated_data):
+        from .services import validate_task_prerequisites
+        ids = validated_data.pop('prerequisite_ids', None)
+        if ids is not None:
+            validate_task_prerequisites(instance.course_id, instance.pk, ids)
+        task = super().update(instance, validated_data)
+        if ids is not None:
+            task.prerequisites.set(ids)
+        return task
 
 
 class CourseCreateSerializer(serializers.Serializer):
@@ -86,21 +112,57 @@ class ManageCourseSerializer(CourseSerializer):
         return data
 
 
+class CycleEntrySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    task_id = serializers.IntegerField()
+    title = serializers.CharField()
+    status = serializers.ChoiceField(choices=InstanceTask.Status.choices)
+    removed_at = serializers.DateTimeField(allow_null=True)
+
+
+class CycleSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    started_at = serializers.DateTimeField()
+    ended_at = serializers.DateTimeField(allow_null=True)
+    tasks = CycleEntrySerializer(many=True)
+
+
 class InstanceTaskSerializer(serializers.ModelSerializer):
+    prerequisite_ids = serializers.SerializerMethodField()
+    blocked = serializers.SerializerMethodField()
+    selected = serializers.SerializerMethodField()
+
     class Meta:
         model = InstanceTask
-        fields = ['id', 'title', 'hours', 'status', 'position']
+        fields = ['id', 'title', 'hours', 'status', 'position', 'prerequisite_ids', 'blocked', 'selected']
         read_only_fields = ['id', 'title', 'hours', 'position']
+
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_prerequisite_ids(self, obj):
+        return sorted(p.pk for p in obj.prerequisites.all())
+
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_blocked(self, obj):
+        from .services import task_blocked
+        return task_blocked(obj)
+
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_selected(self, obj):
+        return obj.cycle_entries.filter(cycle__ended_at__isnull=True, removed_at__isnull=True).exists()
 
 
 class InstanceSerializer(serializers.ModelSerializer):
     tasks = InstanceTaskSerializer(many=True, read_only=True)
     progress = serializers.SerializerMethodField()
+    course_title = serializers.CharField(source='course_version.title', read_only=True)
+    active_cycle = serializers.SerializerMethodField()
+    cycle_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Instance
         fields = [
             'id', 'course', 'course_version', 'student', 'mentor', 'status', 'closed_at', 'created_at', 'progress', 'tasks',
+            'course_title', 'active_cycle', 'cycle_history',
         ]
         read_only_fields = fields
 
@@ -108,9 +170,35 @@ class InstanceSerializer(serializers.ModelSerializer):
     def get_progress(self, obj):
         return float(calculate_progress(obj.tasks.all()))
 
+    @staticmethod
+    def cycle_data(cycle):
+        return {
+            'id': cycle.pk, 'started_at': cycle.started_at, 'ended_at': cycle.ended_at,
+            'tasks': [
+                {'id': e.pk, 'task_id': e.task_id, 'title': e.task.title,
+                 'status': e.status, 'removed_at': e.removed_at}
+                for e in cycle.entries.select_related('task').all()
+            ],
+        }
+
+    @extend_schema_field(CycleSerializer(allow_null=True))
+    def get_active_cycle(self, obj):
+        cycle = obj.cycles.filter(ended_at__isnull=True).first()
+        return self.cycle_data(cycle) if cycle else None
+
+    @extend_schema_field(CycleSerializer(many=True))
+    def get_cycle_history(self, obj):
+        return [self.cycle_data(cycle) for cycle in obj.cycles.filter(ended_at__isnull=False)]
+
 
 class InstanceTaskStatusSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=InstanceTask.Status.choices)
+    status = serializers.ChoiceField(choices=InstanceTask.Status.choices, required=False)
+    selected = serializers.BooleanField(required=False)
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError('Podaj status lub wybór zadania do cyklu.')
+        return attrs
 
 
 class StudentsCountSerializer(serializers.Serializer):

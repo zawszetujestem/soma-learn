@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { VersionManagementLinks } from './VersionLifecycle.jsx'
 import { stateLabels } from './EditorParts.jsx'
 import { coursesApi } from './api.js'
 import { approvalLabels, formatHours, formatPercent, instanceStatusLabels, visibilityLabels } from './format.js'
 import { useCurrentUser, useLoader } from './RequireAuth.jsx'
-import { InstanceControls, TaskBoard } from './InstanceParts.jsx'
+import { InstanceControls } from './InstanceParts.jsx'
+import { CycleBoard } from './CycleBoard.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
 
 function normalizeHours(value) {
@@ -153,7 +154,21 @@ function CourseManagement({ courseId, data, setData }) {
         })}
         onDelete={(task) => run(async () => {
           await coursesApi.deleteTask(courseId, task.id)
-          setData((current) => ({ ...current, course: { ...current.course, tasks: current.course.tasks.filter((t) => t.id !== task.id) } }))
+          setData((current) => ({
+            ...current,
+            course: {
+              ...current.course,
+              tasks: current.course.tasks
+                .filter((t) => t.id !== task.id)
+                .map((t) => (t.prerequisite_ids ? { ...t, prerequisite_ids: t.prerequisite_ids.filter((id) => id !== task.id) } : t)),
+            },
+          }))
+        })}
+        onSavePrerequisites={(task, prerequisiteIds) => run(async () => {
+          await coursesApi.updateTask(courseId, task.id, { prerequisite_ids: prerequisiteIds })
+          // The server validates the dependency graph; read the course back for the saved state.
+          const fresh = await coursesApi.getMine(courseId)
+          setData((current) => ({ ...current, course: fresh }))
         })}
       />
 
@@ -168,16 +183,20 @@ function CourseManagement({ courseId, data, setData }) {
                 <h3>Uczeń nr {instance.student}</h3>
                 <p>{instanceStatusLabels[instance.status]}</p>
                 <p>Postęp: <span>{formatPercent(instance.progress)}</span></p>
+                <Link className="text-link" to={`/kursy/instancje/${instance.id}`}>
+                  Otwórz tablicę ucznia nr {instance.student}
+                </Link>
                 <InstanceControls
                   instance={instance}
                   busy={busy}
                   onClose={() => changeInstance(instance, coursesApi.closeInstance)}
                   onResume={() => changeInstance(instance, coursesApi.resumeInstance)}
                 />
-                <TaskBoard
-                  tasks={instance.tasks}
-                  readOnly={instance.status !== 'active' || busy}
-                  onChange={(task, status) => changeTaskStatus(instance, task, status)}
+                <CycleBoard
+                  instance={instance}
+                  canEdit={instance.status === 'active'}
+                  busy={busy}
+                  onTaskChange={(task, changes) => changeTaskStatus(instance, task, changes)}
                 />
               </article>
             </li>
@@ -229,17 +248,75 @@ function InviteLink({ token, busy, onRegenerate }) {
   )
 }
 
-function TasksSection({ course, busy, onAdd, onDelete }) {
-  const [draft, setDraft] = useState({ title: '', hours: '' })
+function orderedIds(tasks, ids) {
+  return tasks.filter((task) => ids.includes(task.id)).map((task) => task.id)
+}
+
+function PrerequisiteChoices({ legend, options, selected, onToggle, disabled }) {
+  return (
+    <fieldset className="prerequisite-choices" disabled={disabled}>
+      <legend>{legend}</legend>
+      {options.map((option) => (
+        <label key={option.id} className="checkbox-row">
+          <input type="checkbox" checked={selected.includes(option.id)} onChange={() => onToggle(option.id)} />
+          {option.title}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+const toggleId = (ids, id) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id])
+
+function TaskPrerequisitesEditor({ task, tasks, busy, onSave }) {
+  const saved = task.prerequisite_ids ?? []
+  const savedKey = saved.join(',')
+  const [selected, setSelected] = useState(saved)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setSelected(task.prerequisite_ids ?? []), [savedKey])
+  const options = tasks.filter((other) => other.id !== task.id)
+
+  return (
+    <details className="prerequisite-editor">
+      <summary>Edytuj wymagania</summary>
+      <PrerequisiteChoices
+        legend={`Wymagania zadania: ${task.title}`}
+        options={options}
+        selected={selected}
+        disabled={busy}
+        onToggle={(id) => setSelected((current) => toggleId(current, id))}
+      />
+      <p className="course-meta">Zadanie będzie dostępne do wyboru w cyklu dopiero po ukończeniu wymaganych zadań.</p>
+      <button
+        type="button"
+        className="button button-secondary"
+        disabled={busy}
+        aria-label={`Zapisz wymagania: ${task.title}`}
+        onClick={() => onSave(task, orderedIds(tasks, selected))}
+      >
+        Zapisz wymagania
+      </button>
+    </details>
+  )
+}
+
+function TasksSection({ course, busy, onAdd, onDelete, onSavePrerequisites }) {
+  const [draft, setDraft] = useState({ title: '', hours: '', prerequisite_ids: [] })
   const [error, setError] = useState(null)
+  const titles = new Map(course.tasks.map((task) => [task.id, task.title]))
 
   function submit(event) {
     event.preventDefault()
     const validation = validateTask(draft)
     setError(validation)
     if (validation) return
-    onAdd({ title: draft.title.trim(), hours: normalizeHours(draft.hours) })
-    setDraft({ title: '', hours: '' })
+    const prerequisiteIds = orderedIds(course.tasks, draft.prerequisite_ids)
+    onAdd({
+      title: draft.title.trim(),
+      hours: normalizeHours(draft.hours),
+      ...(prerequisiteIds.length > 0 ? { prerequisite_ids: prerequisiteIds } : {}),
+    })
+    setDraft({ title: '', hours: '', prerequisite_ids: [] })
   }
 
   return (
@@ -248,11 +325,19 @@ function TasksSection({ course, busy, onAdd, onDelete }) {
       {course.tasks.length === 0 && <EmptyMessage>Kurs nie ma jeszcze zadań.</EmptyMessage>}
       <ol className="task-list">
         {course.tasks.map((task) => (
-          <li key={task.id}>
+          <li key={task.id} className="course-task">
             <span>{task.title}</span> <span className="task-hours">{formatHours(task.hours)}</span>{' '}
+            <span className="task-prereqs">
+              {(task.prerequisite_ids ?? []).some((id) => titles.has(id))
+                ? `Wymaga: ${(task.prerequisite_ids ?? []).map((id) => titles.get(id)).filter(Boolean).join(', ')}`
+                : 'Bez wymagań'}
+            </span>{' '}
             <button type="button" className="button button-secondary" disabled={busy} aria-label={`Usuń zadanie: ${task.title}`} onClick={() => onDelete(task)}>
               Usuń
             </button>
+            {course.tasks.length > 1 && (
+              <TaskPrerequisitesEditor task={task} tasks={course.tasks} busy={busy} onSave={onSavePrerequisites} />
+            )}
           </li>
         ))}
       </ol>
@@ -265,6 +350,15 @@ function TasksSection({ course, busy, onAdd, onDelete }) {
           <label htmlFor="task-hours">Godziny</label>
           <input id="task-hours" type="text" inputMode="decimal" value={draft.hours} onChange={(event) => setDraft({ ...draft, hours: event.target.value })} />
         </div>
+        {course.tasks.length > 0 && (
+          <PrerequisiteChoices
+            legend="Wymagania nowego zadania"
+            options={course.tasks}
+            selected={draft.prerequisite_ids}
+            disabled={busy}
+            onToggle={(id) => setDraft((current) => ({ ...current, prerequisite_ids: toggleId(current.prerequisite_ids, id) }))}
+          />
+        )}
         {error && <p className="courses-error" role="alert">{error}</p>}
         <button type="submit" className="button button-secondary" disabled={busy}>Dodaj zadanie</button>
       </form>

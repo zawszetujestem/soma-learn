@@ -108,10 +108,18 @@ export const coursesApi = {
   joinCourse: (id) => post(`/api/courses/${id}/join/`),
   joinByToken: (token) => post(`/api/courses/join/${encodeURIComponent(token)}/`),
   createTask: (id, data) => post(`/api/courses/${id}/tasks/`, data),
+  updateTask: (id, taskId, data) => patch(`/api/courses/${id}/tasks/${taskId}/`, data),
   deleteTask: (id, taskId) => request('DELETE', `/api/courses/${id}/tasks/${taskId}/`),
   listInstances: () => get('/api/instances/'),
+  listMyInstances: () => get('/api/instances/mine/'),
   getInstance: (id) => get(`/api/instances/${id}/`),
-  updateInstanceTask: (id, taskId, status) => patch(`/api/instances/${id}/tasks/${taskId}/`, { status }),
+  // Accepts a status string (legacy callers) or a partial { status, selected } object.
+  updateInstanceTask: (id, taskId, changes) => patch(
+    `/api/instances/${id}/tasks/${taskId}/`,
+    typeof changes === 'string' ? { status: changes } : changes,
+  ),
+  startCycle: (id) => post(`/api/instances/${id}/cycles/`),
+  closeCycle: (id, cycleId) => post(`/api/instances/${id}/cycles/${cycleId}/close/`),
   closeInstance: (id) => post(`/api/instances/${id}/close/`),
   resumeInstance: (id) => post(`/api/instances/${id}/resume/`),
 }

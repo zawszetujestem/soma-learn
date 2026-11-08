@@ -75,6 +75,7 @@ class CourseTask(models.Model):
     title = models.CharField(max_length=255)
     hours = models.DecimalField(max_digits=6, decimal_places=2)
     position = models.PositiveIntegerField(default=0)
+    prerequisites = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='dependents')
 
     class Meta:
         ordering = ['position', 'id']
@@ -115,9 +116,9 @@ class Instance(models.Model):
         ordering = ['-created_at', 'id']
         constraints = [
             models.UniqueConstraint(
-                fields=['student'],
+                fields=['student', 'course'],
                 condition=Q(status='active'),
-                name='one_active_instance_per_student',
+                name='one_active_instance_per_student_course',
             ),
         ]
 
@@ -145,6 +146,7 @@ class InstanceTask(models.Model):
     hours = models.DecimalField(max_digits=6, decimal_places=2)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.TODO)
     position = models.PositiveIntegerField(default=0)
+    prerequisites = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='dependents')
 
     class Meta:
         ordering = ['position', 'id']
@@ -154,6 +156,33 @@ class InstanceTask(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class InstanceCycle(models.Model):
+    instance = models.ForeignKey(Instance, on_delete=models.CASCADE, related_name='cycles')
+    started_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['started_at', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['instance'], condition=Q(ended_at__isnull=True),
+                                    name='one_active_cycle_per_instance'),
+        ]
+
+
+class InstanceCycleTask(models.Model):
+    cycle = models.ForeignKey(InstanceCycle, on_delete=models.CASCADE, related_name='entries')
+    task = models.ForeignKey(InstanceTask, on_delete=models.PROTECT, related_name='cycle_entries')
+    # Historical status is frozen when removed or when the cycle ends.
+    status = models.CharField(max_length=12, choices=InstanceTask.Status.choices)
+    removed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(fields=['cycle', 'task'], name='one_task_entry_per_cycle'),
+        ]
 
 
 class Classification(models.Model):

@@ -144,6 +144,30 @@ describe('tworzenie kursu (AC-51)', () => {
 })
 
 describe('szczegóły kursu mentora (AC-22, AC-50)', () => {
+  it('pokazuje zablokowane i niewybrane zadania w backlogu zamiast na tablicy', async () => {
+    mockApi({
+      ...sessionAs(MENTOR),
+      'GET /api/courses/mine/5/': ok(MINE_COURSE),
+      'GET /api/courses/mine/5/students-count/': ok({ count: 1 }),
+      'GET /api/instances/': ok([{
+        id: 10, course: 5, student: 21, mentor: MENTOR.id, status: 'active', progress: 0,
+        active_cycle: { id: 7, started_at: '2026-01-01T10:00:00Z' },
+        tasks: [
+          { id: 1, title: 'Selected', hours: '1.00', status: 'todo', selected: true, blocked: false },
+          { id: 2, title: 'Blocked', hours: '1.00', status: 'todo', selected: false, blocked: true },
+          { id: 3, title: 'Unselected', hours: '1.00', status: 'todo', selected: false, blocked: false },
+        ],
+      }]),
+    })
+    renderApp('/kursy/moje/5')
+    const backlog = await screen.findByRole('region', { name: 'Backlog' })
+    const board = screen.getByRole('region', { name: 'Tablica cyklu' })
+    expect(within(backlog).getByText('Blocked')).toBeInTheDocument()
+    expect(within(backlog).getByText('Unselected')).toBeInTheDocument()
+    expect(within(board).queryByText('Blocked')).not.toBeInTheDocument()
+    expect(within(board).getByText('Selected')).toBeInTheDocument()
+  })
+
   const INSTANCES = [
     {
       id: 10, course: 5, student: 21, mentor: MENTOR.id, status: 'active', closed_at: null, progress: 50.0,

@@ -21,6 +21,13 @@ export const visibilityLabels = {
   private: 'Prywatny',
 }
 
+export function formatDateTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 export const instanceStatusLabels = {
   active: 'Aktywna',
   closed: 'Zamknięta',

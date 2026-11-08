@@ -72,10 +72,10 @@ class InstancesApiTests(TestCase):
         detail = self.client.get(f'/api/instances/{solo.pk}/')
         self.assertEqual(detail.data['progress'], 50.0)
 
-    def test_student_with_mentor_cannot_update_task_status(self):
+    def test_student_with_mentor_can_update_task_status(self):
         self.as_user(self.student)
         response = self.client.patch(self.status_url(), {'status': 'done'}, format='json')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
 
     def test_mentor_updates_task_status(self):
         self.as_user(self.mentor)
@@ -114,9 +114,9 @@ class InstancesApiTests(TestCase):
         self.assertEqual(again.status_code, 409)
         self.assertEqual(again.data['code'], 'already_closed')
 
-    def test_student_with_mentor_cannot_close(self):
+    def test_student_with_mentor_can_close(self):
         self.as_user(self.student)
-        self.assertEqual(self.client.post(f'/api/instances/{self.instance.pk}/close/').status_code, 403)
+        self.assertEqual(self.client.post(f'/api/instances/{self.instance.pk}/close/').status_code, 200)
 
     def test_stranger_cannot_close(self):
         self.as_user(self.stranger)
@@ -132,11 +132,11 @@ class InstancesApiTests(TestCase):
         self.assertIsNone(response.data['closed_at'])
         self.assertEqual(len(response.data['tasks']), 2)
 
-    def test_student_with_mentor_cannot_resume(self):
+    def test_student_with_mentor_can_resume(self):
         self.as_user(self.mentor)
         self.client.post(f'/api/instances/{self.instance.pk}/close/')
         self.as_user(self.student)
-        self.assertEqual(self.client.post(f'/api/instances/{self.instance.pk}/resume/').status_code, 403)
+        self.assertEqual(self.client.post(f'/api/instances/{self.instance.pk}/resume/').status_code, 200)
 
     def test_resume_of_active_instance_conflicts(self):
         self.as_user(self.mentor)

@@ -257,6 +257,33 @@
 .app-shell .confirm-backdrop { background: #20243A80; }
 .app-shell .confirm-dialog { min-width: 0; border-radius: 24px; background: #fff; color: var(--ink); box-shadow: 0 12px 48px #20243A30; }
 
+/* Learning cycles: board, backlog, history, task prerequisites. */
+.app-shell .task-card { display: grid; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.app-shell .task-card .button { min-height: 44px; width: 100%; }
+.app-shell .task-card-blocked { background: var(--paper); border: 1px dashed var(--line); }
+.app-shell .task-blocked,
+.app-shell .task-prereqs { color: var(--muted, #555); font-size: 0.95rem; }
+.app-shell .task-column h3 { margin: 0 0 12px; font-size: 1.1rem; }
+.app-shell .task-column-empty { margin: 0; color: var(--muted, #555); }
+.app-shell .backlog-list { list-style: none; padding: 0; display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.app-shell .instance-note { max-width: 70ch; }
+.app-shell .cycle-history { list-style: none; padding: 0; display: grid; gap: 16px; }
+.app-shell .cycle-history-item { min-width: 0; border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: #fff; }
+.app-shell .cycle-history-item h3 { margin: 0 0 8px; }
+.app-shell .cycle-snapshot { padding-inline-start: 20px; overflow-wrap: anywhere; }
+.app-shell .course-task { min-width: 0; overflow-wrap: anywhere; }
+.app-shell .prerequisite-editor summary { min-height: 44px; padding-block: 8px; color: var(--forest); cursor: pointer; }
+.app-shell .prerequisite-choices { min-width: 0; display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+.app-shell .checkbox-row { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.app-shell .checkbox-row input { width: 18px; height: 18px; flex: none; }
+.app-shell :is(.task-card, .checkbox-row, .prerequisite-editor summary) :is(button, input, select):focus-visible,
+.app-shell .prerequisite-editor summary:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
+
+@media (min-width: 600px) {
+  .app-shell .backlog-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .task-card .button { width: auto; justify-self: start; }
+}
+
 @media (min-width: 600px) {
   .app-shell .role-picker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

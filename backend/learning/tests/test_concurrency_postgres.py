@@ -10,7 +10,7 @@ from learning.tests.helpers import make_course, make_user
 
 @skipUnlessDBFeature('has_select_for_update')
 class ConcurrentJoinTests(TransactionTestCase):
-    """AC-26: równoległe dołączenia jednego ucznia do dwóch kursów -> jedna aktywna instancja."""
+    """Parallel enrollment preserves per-course uniqueness, not a global slot."""
 
     def setUp(self):
         if connection.vendor != 'postgresql':
@@ -20,7 +20,7 @@ class ConcurrentJoinTests(TransactionTestCase):
         self.course_a = make_course(self.mentor, title='A')
         self.course_b = make_course(self.mentor, title='B')
 
-    def test_parallel_joins_to_two_courses_leave_one_active_instance(self):
+    def test_parallel_joins_to_two_courses_leave_two_active_instances(self):
         barrier = threading.Barrier(2)
         results = [None, None]
 
@@ -44,12 +44,11 @@ class ConcurrentJoinTests(TransactionTestCase):
 
         successes = [r for r in results if isinstance(r, tuple)]
         failures = [r for r in results if isinstance(r, Exception)]
-        self.assertEqual(len(successes), 1)
-        self.assertEqual(len(failures), 1)
-        self.assertEqual(failures[0].detail['code'], 'slot_taken')
+        self.assertEqual(len(successes), 2)
+        self.assertEqual(len(failures), 0)
         self.assertEqual(
             Instance.objects.filter(student=self.student, status=Instance.Status.ACTIVE).count(),
-            1,
+            2,
         )
 
 

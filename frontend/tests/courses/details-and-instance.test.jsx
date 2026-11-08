@@ -48,6 +48,7 @@ describe('szczegóły kursu', () => {
     renderApp('/kursy/2')
 
     expect(await screen.findByText(/ładowanie kursu/i)).toBeInTheDocument()
+    await waitFor(() => expect(finish).toBeTypeOf('function'))
     finish()
     expect(await screen.findByRole('heading', { name: COURSE_OPEN.title })).toBeInTheDocument()
   })
@@ -73,7 +74,8 @@ describe('instancja ucznia (AC-49)', () => {
     expect(calls.find((call) => call.method === 'PATCH').body).toEqual({ status: 'in_progress' })
   })
 
-  it('w instancji prowadzonej przez mentora statusy są tylko do odczytu', async () => {
+  it('w instancji z przypisanym mentorem uczeń nadal zarządza statusami i zamknięciem', async () => {
+    // Zatwierdzona zmiana: uczeń wybiera zadania, zmienia statusy i zamyka kurs także z mentorem.
     mockApi({
       ...sessionAs(STUDENT),
       'GET /api/instances/11/': ok({ ...INSTANCE_OWN, mentor: MENTOR.id }),
@@ -82,9 +84,9 @@ describe('instancja ucznia (AC-49)', () => {
 
     renderApp('/kursy/instancje/11')
 
-    expect(await screen.findByText(/mentor prowadzi tę instancję/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/zmień status: join/i)).toBeDisabled()
-    expect(screen.queryByRole('button', { name: /zamknij instancję/i })).not.toBeInTheDocument()
+    expect(await screen.findByLabelText(/zmień status: join/i)).toBeEnabled()
+    expect(screen.queryByText(/tylko do odczytu/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /zamknij instancję/i })).toBeEnabled()
   })
 
   it('zamknięta instancja jest tylko do odczytu i pozwala ją wznowić', async () => {

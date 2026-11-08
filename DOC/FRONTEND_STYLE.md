@@ -2,7 +2,7 @@
 title: SOMA Learn — wytyczne stylu homepage i widoków produkcyjnych
 type: frontend-guidelines
 language: pl
-scope: "Homepage / oraz wszystkie istniejące widoki produkcyjne auth, kursów, wspólny header/footer i NotFound"
+scope: "Homepage / oraz widoki produkcyjne auth, kursów, nauki ucznia, wspólny header/footer i NotFound"
 ---
 
 # SOMA Learn — wytyczne stylu homepage i widoków produkcyjnych
@@ -16,8 +16,9 @@ Jedno kanoniczne źródło zatwierdzonego stylu i jego realizacji. Punktem wyjś
 - **Matura jest planowana**, bez dostępności, zapisów, sprzedaży lub obietnicy terminu.
 - Manrope lokalny jest przyjętym założeniem technicznym.
 - Początkowe zatwierdzenie dotyczyło wyłącznie `/`. **Późniejsza jawna zgoda użytkownika rozszerza kafelkowy styl homepage na wszystkie istniejące widoki produkcyjne**: logowanie, rejestrację, reset hasła, weryfikację e-maila, callback Google, katalog/szczegóły kursów, widoki mentora, edytor i podgląd wersji, moderację, dołączenie i instancję ucznia, wspólny header/footer oraz NotFound.
+- Późniejsza funkcja panelu ucznia dodała trasę `/nauka` w istniejącym shellu oraz link „Moja nauka” w zalogowanych nagłówkach. To odnotowanie istniejącej nawigacji, nie osobny odbiór wizualny nowego widoku.
 - Warianty ABC usunięto w całości. `/wzory/*` trafia do zwykłego NotFound, bez przekierowania; produkcyjny podgląd wersji kursu pozostaje dostępny na dotychczasowej trasie.
-- To zmiana stylu istniejących ekranów, nie zatwierdzenie nowych funkcji lub tras proponowanych w specyfikacji. Bez zmian API, handlerów, `useLogoutFlow`, uprawnień, auth, lifecycle kursów, prywatności, limitów załączników ani obsługi konfliktu rewizji 409. Katalog nadal wymaga logowania.
+- Rozszerzenie stylu nie zatwierdza samo w sobie nowych funkcji lub tras proponowanych w specyfikacji. Funkcjonalne zachowanie `/nauka` i tablicy opisuje [frontend README](../frontend/README.md), a kontrakt API — [BACKEND.md](BACKEND.md). Katalog nadal wymaga logowania.
 
 ## Kierunek i kolory
 
@@ -57,7 +58,7 @@ Rodzina: `'Manrope Variable', Manrope, system-ui, sans-serif`. `fonts.css` dekla
 
 Hero: **„Ogarnij egzamin. Krok po kroku.”** Kolejność: header → hero → ścieżki → metoda → przykładowe kursy → statyczna lekcja → O nas → końcowe CTA → stopka.
 
-Header homepage: Kursy (`/kursy`), Jak działa SOMA? (`#metoda`), O nas (`#o-nas`), Zaloguj się (`/logowanie`) lub Wyloguj, Zacznij naukę (gość `/rejestracja`, zalogowany `/kursy`). Wspólny header pozostałych tras zachowuje kolejność: Jak działa SOMA (`/#metoda`), Kursy, Logowanie lub Wyloguj. Katalog nadal wymaga auth. CTA prowadzą wyłącznie do istniejących tras lub prawdziwych sekcji. Końcowe „Utwórz konto” na homepage jest ukryte po zalogowaniu.
+Header homepage: Kursy (`/kursy`), „Moja nauka” (`/nauka`, dla zalogowanych), Jak działa SOMA? (`#metoda`), O nas (`#o-nas`), Zaloguj się (`/logowanie`) lub Wyloguj, Zacznij naukę (gość `/rejestracja`, zalogowany `/kursy`). Wspólny header pozostałych tras zachowuje kolejność: Jak działa SOMA (`/#metoda`), Kursy, „Moja nauka” dla zalogowanych, Logowanie lub Wyloguj. Katalog nadal wymaga auth. CTA prowadzą wyłącznie do istniejących tras lub prawdziwych sekcji. Końcowe „Utwórz konto” na homepage jest ukryte po zalogowaniu.
 
 Wylogowanie zachowuje wspólny `useLogoutFlow`: busy/disabled, niepotwierdzenie z alertem i „Ponów wylogowanie”, potwierdzenie z `role="status"`; stan przetrwa zmianę nagłówka.
 

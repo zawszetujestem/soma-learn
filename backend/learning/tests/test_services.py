@@ -71,13 +71,12 @@ class JoinCourseServiceTests(TestCase):
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(Instance.objects.count(), 1)
 
-    def test_student_with_other_active_instance_gets_slot_taken(self):
+    def test_student_with_other_active_instance_can_join(self):
         other = make_course(self.owner, title='Inny kurs')
         services.join_course(self.student, course_id=other.pk)
-        with self.assertRaises(APIException) as ctx:
-            services.join_course(self.student, course_id=self.course.pk)
-        self.assertEqual(ctx.exception.detail['code'], 'slot_taken')
-        self.assertEqual(ctx.exception.status_code, 409)
+        instance, created = services.join_course(self.student, course_id=self.course.pk)
+        self.assertTrue(created)
+        self.assertEqual(instance.course_id, self.course.pk)
 
     def test_inactive_course_gives_course_inactive(self):
         self.course.is_active = False
@@ -186,12 +185,18 @@ class InstanceLifecycleServiceTests(TestCase):
             services.resume_instance(self.owner, self.instance)
         self.assertEqual(ctx.exception.detail['code'], 'already_active')
 
-    def test_resume_blocked_when_student_has_other_active_instance(self):
+    def test_resume_allowed_when_student_has_other_active_course(self):
         services.close_instance(self.owner, self.instance)
         other = make_course(self.owner, title='Inny')
         services.join_course(self.student, course_id=other.pk)
+        resumed = services.resume_instance(self.owner, self.instance)
+        self.assertEqual(resumed.status, 'active')
+
+    def test_resume_blocked_when_same_course_has_new_active_instance(self):
+        services.close_instance(self.owner, self.instance)
+        services.join_course(self.student, course_id=self.course.pk)
         with self.assertRaises(APIException) as ctx:
-            services.resume_instance(self.owner, self.instance)
+            services.resume_instance(self.student, self.instance)
         self.assertEqual(ctx.exception.detail['code'], 'slot_taken')
 
     def test_resume_blocked_when_course_inactive(self):
@@ -225,11 +230,11 @@ class InstanceLifecycleServiceTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.status, InstanceTask.Status.DONE)
 
-    def test_student_with_mentor_cannot_change_task_status(self):
+    def test_student_with_mentor_can_change_task_status(self):
         task = self.instance.tasks.get()
-        with self.assertRaises(APIException) as ctx:
-            services.change_instance_task_status(self.student, self.instance, task, InstanceTask.Status.DONE)
-        self.assertEqual(ctx.exception.status_code, 403)
+        services.change_instance_task_status(self.student, self.instance, task, InstanceTask.Status.DONE)
+        task.refresh_from_db()
+        self.assertEqual(task.status, InstanceTask.Status.DONE)
 
 
 class CourseManagementServiceTests(TestCase):

@@ -21,6 +21,7 @@ function HomeHeader({ loggedIn, logoutState, handleLogout }) {
         <HomeLogo />
         <nav className="sl-nav" aria-label="Główna nawigacja">
           <Link to="/kursy">Kursy</Link>
+          {loggedIn && <Link to="/nauka">Moja nauka</Link>}
           <a href="#metoda">Jak działa SOMA?</a>
           <a href="#o-nas">O nas</a>
           {loggedIn ? (

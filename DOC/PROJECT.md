@@ -48,7 +48,7 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 
 ### Frontend (prototyp informacyjny)
 - React 19 + Vite 8, React Router 7; testy Vitest + Testing Library
-- `/` jest responsywną homepage według [zatwierdzonych wytycznych stylu](FRONTEND_STYLE.md): hero, ścieżki egzaminacyjne, metoda z refleksją/adaptacją, jawne przykłady kursów, statyczny preview lekcji i O nas. Matura jest planowana; nie jest to dashboard ani oferta przykładowych kursów.
+- `/` przedstawia SOMA oraz sekcje dla ucznia, rodzica i mentora; pierwszą grupą są ósmoklasiści, maturzyści są planowani później
 - `/kursy` pokazuje listę kursów dla zalogowanych użytkowników; `/logowanie` działa z API allauth Headless (email + hasło + kod, Google tylko dla zweryfikowanych kont)
 - Dołączanie do kursów prywatnych przez link z tokenem jest zaimplementowane; zaproszenia imienne przez mentora są planowane, ale niezaimplementowane
 - Końcowe QA prototypu: `npm test` 10/10, `npm run build` poprawny, `get_errors` bez błędów; QA nie wykazał blockerów
@@ -57,29 +57,12 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Nie wykonano testu z czytnikiem ekranu ani pełnego audytu WCAG
 - Instrukcje uruchomienia i testów: `../frontend/README.md`
 
-### Homepage — historyczny odbiór przed późniejszymi kafelkami (✅ QA PASS, 31.10.2026)
-
-- W tym wcześniejszym etapie własny scoped layout `/`, typologo bez symbolu i lokalny Manrope nie zmieniały wyglądu kursów, auth ani ówczesnych wzorów. Bez nowych API, tras lub dashboardu. Ten odbiór nie potwierdza późniejszych kafelków homepage; ich osobne QA pozostaje do potwierdzenia.
-- TDD wykonane przed implementacją i poprawkami QA. Końcowe testy: relevant 96 passed, pełny frontend 260 passed / 1 skipped, build OK.
-- Niezależny Chrome 156/CDP: 320/390/768/960/1440 bez overflow, kontrast minimum 7,05:1, polski font, focus/skip, zoom 200%/400%, regresja wizualna innych tras. Poprawione kotwice i CTA zalogowanego; retest kotwic 12/12.
-- Docker po restarcie frontendu i instalacji zależności: cztery usługi healthy, frontend 5174 i backend 8001 odpowiadają HTTP 200. Bez deploy.
-- Nie wykonano pełnego WCAG/screen readera, CWV, Firefox/Safari, fizycznych urządzeń ani rzeczywistego E2E auth dla tej zmiany. Szczegóły: [frontend README](../frontend/README.md#weryfikacja), [kanoniczne wytyczne](FRONTEND_STYLE.md).
-
-### Styl istniejących widoków produkcyjnych (✅ niezależne CODE QA PASS, 31.10.2026)
-
-- Późniejsza jawna zgoda użytkownika rozszerza kafelkowy styl homepage na wszystkie istniejące auth, kursy, wspólny header/footer i NotFound. Jedno źródło realizacji i granic: [FRONTEND_STYLE.md](FRONTEND_STYLE.md); źródłowa specyfikacja v1.0 pozostaje zbiorem częściowo zatwierdzonych kierunków i propozycji, nie zatwierdzeniem całego produktu.
-- Scoped `.app-shell` w `app-shell.css`, importowany w `main.jsx` po `styles.css`; wspólny istniejący `HomeLogo` bez zmiany DOM. ABC usunięte, `/wzory/*` pokazuje NotFound bez przekierowania; podgląd wersji kursu zachowany. Bez zmian API, handlerów, sesji/`useLogoutFlow`, uprawnień, lifecycle, prywatności, limitów załączników i rewizji 409; bez nowych funkcji.
-- Po poprawce P2 kaskady niezależny pełny frontend **289 passed / 1 skipped**, build PASS; regresja **10 plików / 155 passed**. Docker: cztery usługi healthy, frontend 5174/backend 8001 przywrócone, bez wdrożenia.
-- Chromium 156.0.8078.4 z syntetycznym API: 62 pomiary przy 320/390/1440 px bez błędów poziomego overflow, wypełnione kursy/edytor, auth, dialog i podgląd ucznia. Potwierdzono lokalny polski font, focus i reduced motion.
-- P3 nieblokujące: niektóre textarea podczas Tab w głębokim edytorze 320×900 częściowo poniżej viewportu, ale przewijalne i bez blokady edycji; niepotwierdzona regresja, nie naprawiony błąd.
-- Reflow responsive-equivalent, nie natywny zoom; zrzuty tylko w pamięci, bez inspekcji estetyki. Bez pełnego WCAG/screen readera, Firefox/Safari, fizycznych urządzeń, pełnego rzeczywistego E2E auth, testów backendu i penetracji dla tego zakresu. Dokładne wyniki przekazanego QA, TDD i ograniczenia: [frontend README — Weryfikacja](../frontend/README.md#weryfikacja).
-
 ### Kursy — tworzenie przez mentora i wersjonowanie (✅ zaimplementowane, 30.10.2026)
 - Kurs ma trwałą tożsamość oddzieloną od wersji treści. Tworzenie rozpoczyna wersję 1 jako roboczą; mentor publikuje kurs prywatny lub zgłasza publiczny do moderacji. Administrator moderuje zgłoszenia przez API i akcje Django admin. Edycja wersji nie powoduje automatycznej reweryfikacji; publikacja jest jawnym przejściem lifecycle.
 - Treść obejmuje klasyfikację Zakres/Przedmiot, hierarchię Dział→Temat→Lekcja, materiały teorii/praktyki, testy i informacyjne wymagania wstępne. Katalog pokazuje wyłącznie drzewo programu, bez materiałów i testów. Instancja ucznia zachowuje przypiętą wersję; CourseTask i plan godzinowy pozostają niezależne od wersji.
 - Załączniki są prywatne, pobierane przez API, z limitami PDF 20 MB, obrazów 5 MB, 20 załączników na lekcję i 1 GB na kurs (MB/GB dziesiętne). `approval_status`, `title` i `description` na Course są polami archiwalnymi.
 - Wyniki weryfikacji: backend SQLite 316 OK/8 skip, PostgreSQL 316/316 OK, `makemigrations --check` bez zmian, `manage.py check` 0 issues; frontend 230 passed/1 skip, build i smoke API OK; niezależne QA POZYTYWNY.
-- Ograniczenia: brak rozwiązywania/oceniania testów, wymagania wstępne nie są egzekwowane, walidacja plików nie jest antywirusem. QA nie zweryfikowało manualnie responsywności J6 w pełnej przeglądarce. Niestabilny test frontendowy `join-by-token` ustabilizowano synchronizacją w teście (30/30 OK).
+- Ograniczenia: brak rozwiązywania/oceniania testów; wymagania wstępne `NodePrerequisite` w treści nie są egzekwowane (zależności `CourseTask` planu opisane w późniejszym statusie funkcji są egzekwowane); walidacja plików nie jest antywirusem. QA nie zweryfikowało manualnie responsywności J6 w pełnej przeglądarce. Niestabilny test frontendowy `join-by-token` ustabilizowano synchronizacją w teście (30/30 OK).
 - Szczegóły modeli, lifecycle, endpointów, błędów, migracji i storage: [BACKEND.md](BACKEND.md#kursy-zadania-i-instancje); trasy i uruchomienie funkcji: [frontend/README.md](../frontend/README.md#trasy-i-zakres).
 
 ### Zaufana przeglądarka (✅ zaimplementowane, QA PASS 30.10.2026)
@@ -88,6 +71,15 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 - Frontend obsługuje logowanie bez etapu kodu przy ważnym zaufaniu oraz ostrzeżenie i retry przy niepotwierdzonym wylogowaniu. Google i formularz `/admin/` bez zmian; brak panelu urządzeń.
 - Niezależne QA: backend 236 OK, 1 pominięty (celowane 29 OK); frontend ponowiony pełny przebieg 143 zaliczone, 1 pominięty (celowane 21 OK), build OK. Pierwszy przebieg frontendu ujawnił istniejący flaky P3 testu kursów, bez naprawy w tym zakresie; brak blockerów.
 - To pomijanie OTP, nie pełne zabezpieczenie konta: skopiowane cookie nadal wymaga hasła, a token DRF nadal pozostaje ważny po logout/resecie. Nie wykonano pełnego rzeczywistego E2E, PostgreSQL ani prawdziwego Google OAuth dla tej funkcji. Szczegóły kontraktu, wyników i ograniczeń: [BACKEND.md](BACKEND.md#zaufana-przeglądarka--okres-ważności-i-ograniczenia); obsługa użytkownika: [frontend/README.md](../frontend/README.md#zaufana-przeglądarka-i-wylogowanie).
+
+### Plan nauki: wiele kursów, zależności i cykle (✅ zaimplementowane, QA PASS 01.11.2026)
+- Uczeń może mieć aktywne instancje różnych kursów; ponowne dołączenie do tej samej aktywnej instancji jest idempotentne. Kurs prywatny jest dostępny przez zaproszenie; w przepływie nie ma płatności.
+- `CourseTask` obsługuje jawne zależności bez self-reference i cykli. Przy dołączeniu zadania i ich zależności są kopiowane do instancji, a wersja treści jest przypinana; późniejsze zmiany planu/wersji nie przepisują jej.
+- Uczeń i przypisany mentor zachowują uprawnienia instancji. Można ręcznie prowadzić jeden cykl naraz na instancję, wybierać zadania na tablicę z backlogu, przeglądać historię oraz zamknąć i wznowić tę samą instancję bez automatycznego cyklu. Brak limitu długości i liczby zadań cyklu.
+- `/nauka` pokazuje własne aktywne instancje ucznia i historię, nie kursy, w których użytkownik jest wyłącznie mentorem. Link jest dostępny w nagłówkach, katalogu, po zalogowaniu i z widoku instancji; mentor widzi ten sam komponent tablicy oraz link do pełnej instancji.
+- Niezależne QA: **PASS, bez blockerów**, po trzech poprawkach P2. Backend SQLite: **327 PASS / 8 SKIP** z 335; testy celowane **50 PASS**; migracje bez zmian, `manage.py check` 0. Frontend: kursy **186 PASS**, build PASS, wybrane 8 plików **104 PASS**; pełny przebieg **332 PASS / 7 FAIL / 1 SKIP**. Wszystkie 7 niepowodzeń pełnego przebiegu potwierdzono jako przedistniejące konflikty testów logowania/sesji/nawigacji/zaufanej przeglądarki; pełny zestaw nie jest w całości zielony. Test klawiatury w jsdom PASS.
+- Nie wykonano rzeczywistego E2E przeglądarkowego, przebiegu współbieżności PostgreSQL ani ręcznej oceny zoomu mobilnego, kontrastu i czytnika ekranu. Pozostały istniejące ostrzeżenia generowania OpenAPI dotyczące serializerów users/content i kolizji `operationId`.
+- Szczegóły modeli, API, migracji i uprawnień: [BACKEND.md](BACKEND.md); obsługa, trasy i QA: [frontend/README.md](../frontend/README.md).
 
 ### Dokumentacja (✅)
 - Framework SOMA opisany i sformatowany
@@ -104,7 +96,7 @@ SOMA Learn to system edukacyjny, który pomaga uczniom pracować według framewo
 
 ## Dokumenty referencyjne
 
-- [soma/README.md](soma/README.md) – opis frameworka SOMA,
+- `../soma/README.md` – opis frameworka SOMA,
 - `AGENTS.md` – role w zespole agentów,
 - `diagram.mmd` – workflow agentów,
 - `BACKEND.md` – dokumentacja backendowych API, modeli kursów i instancji oraz tras frontendu.

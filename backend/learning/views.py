@@ -199,6 +199,35 @@ class InstanceListView(generics.ListAPIView):
         return services.readable_instances(self.request.user).select_related('course').prefetch_related('tasks')
 
 
+class InstanceMineListView(InstanceListView):
+    def get_queryset(self):
+        return services.Instance.objects.filter(student=self.request.user).select_related(
+            'course', 'course_version',
+        ).prefetch_related('tasks__prerequisites')
+
+
+class InstanceCycleStartView(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=None, responses={201: InstanceSerializer})
+    def post(self, request, pk):
+        instance = services.get_readable_instance(request.user, pk)
+        instance = services.start_cycle(request.user, instance)
+        return Response(InstanceSerializer(instance).data, status=status.HTTP_201_CREATED)
+
+
+class InstanceCycleCloseView(APIView):
+    authentication_classes = AUTHENTICATION_CLASSES
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=None, responses=InstanceSerializer)
+    def post(self, request, pk, cycle_pk):
+        instance = services.get_readable_instance(request.user, pk)
+        instance = services.close_cycle(request.user, instance, cycle_pk)
+        return Response(InstanceSerializer(instance).data)
+
+
 class InstanceDetailView(generics.RetrieveAPIView):
     authentication_classes = AUTHENTICATION_CLASSES
     permission_classes = [IsAuthenticated]
@@ -220,8 +249,8 @@ class InstanceTaskStatusView(APIView):
         task = InstanceTask.objects.filter(pk=task_pk, instance=instance).first()
         if task is None:
             raise services.not_found()
-        task = services.change_instance_task_status(
-            request.user, instance, task, serializer.validated_data['status'],
+        task = services.change_instance_task(
+            request.user, instance, task, **serializer.validated_data,
         )
         return Response(InstanceTaskSerializer(task).data)
 

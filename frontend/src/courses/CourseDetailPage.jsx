@@ -3,7 +3,7 @@ import { Program } from './VersionContent.jsx'
 import { coursesApi } from './api.js'
 import { approvalLabels, formatHours } from './format.js'
 import { isStudent, useCurrentUser, useLoader } from './RequireAuth.jsx'
-import { activeInstanceOf, JoinCourseButton } from './CoursesPage.jsx'
+import { activeInstanceOf, ActiveCourseNotice, JoinCourseButton } from './CoursesPage.jsx'
 import { ErrorMessage, LoadingMessage } from './StateViews.jsx'
 
 export default function CourseDetailPage() {
@@ -38,7 +38,7 @@ export default function CourseDetailPage() {
   }
 
   const { course, instances } = detail.data
-  const active = student ? activeInstanceOf(instances, user) : null
+  const active = student ? activeInstanceOf(instances, user, course.id) : null
   const isOwner = course.owner === user.id
 
   return (
@@ -66,7 +66,7 @@ export default function CourseDetailPage() {
       </section>
 
       {student && <JoinCourseButton courseId={course.id} disabled={Boolean(active)} />}
-      {active && <p className="courses-banner">Masz już aktywny kurs. <Link to={`/kursy/instancje/${active.id}`}>Przejdź do swojej instancji</Link></p>}
+      {active && <ActiveCourseNotice instance={active} />}
       {isOwner && <Link className="text-link" to={`/kursy/moje/${course.id}`}>Zarządzaj kursem</Link>}
     </main>
   )

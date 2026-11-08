@@ -39,8 +39,20 @@ export function JoinCourseButton({ courseId, disabled = false }) {
   )
 }
 
-export function activeInstanceOf(instances, user) {
-  return instances.find((instance) => instance.status === 'active' && instance.student === user.id) ?? null
+// Learners may have active instances of several different courses at once, so
+// an active instance only blocks joining the same course again.
+export function activeInstanceOf(instances, user, courseId) {
+  return instances.find((instance) => instance.status === 'active'
+    && instance.student === user.id
+    && (courseId === undefined || instance.course === courseId)) ?? null
+}
+
+export function ActiveCourseNotice({ instance }) {
+  return (
+    <p className="courses-banner">
+      Uczysz się już tego kursu. <Link to={`/kursy/instancje/${instance.id}`}>Przejdź do swojej instancji</Link>
+    </p>
+  )
 }
 
 export default function CoursesPage() {
@@ -62,6 +74,7 @@ export default function CoursesPage() {
         {isManager(user) && <Link className="button button-primary" to="/kursy/moje/nowy">Utwórz nowy</Link>}
         {isManager(user) && <Link className="text-link" to="/kursy/moje">Moje kursy</Link>}
         {user.roles.includes('admin') && <Link className="text-link" to="/course-moderation/">Moderacja kursów</Link>}
+        {student && <Link className="text-link" to="/nauka">Moja nauka</Link>}
       </header>
 
       {catalog.status === 'loading' && <LoadingMessage>Ładowanie kursów…</LoadingMessage>}
@@ -76,19 +89,14 @@ export default function CoursesPage() {
 }
 
 function CourseCatalog({ data, student, user }) {
-  const active = student ? activeInstanceOf(data.instances, user) : null
-
   return (
     <>
-      {active && (
-        <p className="courses-banner">
-          Masz już aktywny kurs. <Link to={`/kursy/instancje/${active.id}`}>Przejdź do swojej instancji</Link>
-        </p>
-      )}
       {data.courses.length === 0 && <EmptyMessage>Brak kursów do wyświetlenia.</EmptyMessage>}
       {data.courses.length > 0 && (
         <ul className="course-grid">
-          {data.courses.map((course) => (
+          {data.courses.map((course) => {
+            const active = student ? activeInstanceOf(data.instances, user, course.id) : null
+            return (
             <li key={course.id}>
               <article className="course-card">
                 <h2>{course.title}</h2>
@@ -105,9 +113,11 @@ function CourseCatalog({ data, student, user }) {
                   </Link>
                   {student && <JoinCourseButton courseId={course.id} disabled={Boolean(active)} />}
                 </div>
+                {active && <ActiveCourseNotice instance={active} />}
               </article>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </>

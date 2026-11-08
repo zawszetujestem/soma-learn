@@ -4,12 +4,13 @@ import VersionContent from './VersionContent.jsx'
 import { contentApi, coursesApi } from './api.js'
 import { formatPercent, instanceStatusLabels } from './format.js'
 import { useCurrentUser, useLoader } from './RequireAuth.jsx'
-import { InstanceControls, TaskBoard } from './InstanceParts.jsx'
+import { InstanceControls } from './InstanceParts.jsx'
+import { CycleBoard, CycleHistory, CyclePanel } from './CycleBoard.jsx'
 import { ErrorMessage, LoadingMessage } from './StateViews.jsx'
 
+// The learner always manages their own instance; an assigned mentor keeps the same rights.
 export function canManageInstance(user, instance) {
-  if (instance.mentor != null) return instance.mentor === user.id
-  return instance.student === user.id
+  return instance.student === user.id || (instance.mentor != null && instance.mentor === user.id)
 }
 
 export default function InstancePage() {
@@ -52,11 +53,15 @@ function InstanceView({ user, data, setData, id }) {
   const isActive = instance.status === 'active'
   const canEdit = isActive && canManage
 
-  async function run(action) {
+  // Every mutation is followed by a fresh instance read: the server owns
+  // blocking, cycle closing and dependent ejection.
+  async function mutate(operation) {
     setError(null)
     setBusy(true)
     try {
-      await action()
+      await operation()
+      const fresh = await coursesApi.getInstance(id)
+      setData((current) => ({ ...current, instance: fresh }))
     } catch (actionError) {
       setError(actionError.message)
     } finally {
@@ -64,58 +69,59 @@ function InstanceView({ user, data, setData, id }) {
     }
   }
 
-  function changeTask(task, status) {
-    return run(async () => {
-      await coursesApi.updateInstanceTask(instance.id, task.id, status)
-      const fresh = await coursesApi.getInstance(id)
-      setData((current) => ({ ...current, instance: fresh }))
-    })
-  }
-
-  function changeState(operation) {
-    return run(async () => {
-      const updated = await operation(instance.id)
-      setData((current) => ({ ...current, instance: { ...current.instance, ...updated } }))
-    })
-  }
-
   return (
-    <main className="courses-page page-width">
+    <main className="courses-page page-width instance-page" aria-busy={busy}>
       <header className="courses-header">
         <p className="eyebrow">{instanceStatusLabels[instance.status]}</p>
         <h1>{content.title}</h1>
         <p>Postęp: <span>{formatPercent(instance.progress)}</span></p>
-        <Link className="text-link" to={`/kursy/${instance.course}`}>Wróć do kursu</Link>
+        <div className="course-actions">
+          <Link className="text-link" to={`/kursy/${instance.course}`}>Wróć do kursu</Link>
+          <Link className="text-link" to="/nauka">Moja nauka</Link>
+        </div>
       </header>
 
       {!isActive && (
         <p className="courses-banner">Instancja jest zamknięta i jest tylko do odczytu.</p>
       )}
       {isActive && !canManage && (
-        <p className="courses-banner">Mentor prowadzi tę instancję. Statusy zadań są tylko do odczytu.</p>
+        <p className="courses-banner">Tablicę zmieniają osoba ucząca się i przypisany mentor. Ten widok jest tylko do odczytu.</p>
       )}
       {error && <p className="courses-error" role="alert">{error}</p>}
+      <p role="status" aria-live="polite" className={busy ? 'courses-status' : 'sr-only'}>{busy ? 'Zapisywanie zmian…' : ''}</p>
 
       {canManage && (
-        <div className="course-actions">
+        <div className="course-actions instance-controls">
+          {isActive && (
+            <p className="instance-note">
+              Możesz zakończyć kurs w dowolnym momencie, niezależnie od postępu. Zamknięcie zakończy aktywny cykl, a historia zostanie zachowana i kurs będzie można wznowić.
+            </p>
+          )}
           <InstanceControls
             instance={instance}
             busy={busy}
-            onClose={() => changeState(coursesApi.closeInstance)}
-            onResume={() => changeState(coursesApi.resumeInstance)}
+            onClose={() => mutate(() => coursesApi.closeInstance(instance.id))}
+            onResume={() => mutate(() => coursesApi.resumeInstance(instance.id))}
           />
         </div>
       )}
 
+      <CyclePanel
+        instance={instance}
+        canEdit={canEdit}
+        busy={busy}
+        onStart={() => mutate(() => coursesApi.startCycle(instance.id))}
+        onClose={(cycle) => mutate(() => coursesApi.closeCycle(instance.id, cycle.id))}
+      />
+      <CycleBoard
+        instance={instance}
+        canEdit={canEdit}
+        busy={busy}
+        onTaskChange={(task, changes) => mutate(() => coursesApi.updateInstanceTask(instance.id, task.id, changes))}
+      />
+      <CycleHistory instance={instance} />
+
       <VersionContent version={content} courseId={instance.course} student={content.course_owner !== user.id && !user.roles.includes('admin')} />
-      <section className="course-section" aria-labelledby="instance-tasks-title">
-        <h2 id="instance-tasks-title">Zadania</h2>
-        <TaskBoard
-          tasks={instance.tasks}
-          readOnly={!canEdit || busy}
-          onChange={changeTask}
-        />
-      </section>
     </main>
   )
 }

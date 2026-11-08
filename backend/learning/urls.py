@@ -27,6 +27,9 @@ urlpatterns = [
         name='course-task-detail',
     ),
     path('instances/', views.InstanceListView.as_view(), name='instance-list'),
+    path('instances/mine/', views.InstanceMineListView.as_view(), name='instance-mine-list'),
+    path('instances/<int:pk>/cycles/', views.InstanceCycleStartView.as_view(), name='instance-cycle-start'),
+    path('instances/<int:pk>/cycles/<int:cycle_pk>/close/', views.InstanceCycleCloseView.as_view(), name='instance-cycle-close'),
     path('instances/<int:pk>/', views.InstanceDetailView.as_view(), name='instance-detail'),
     path(
         'instances/<int:pk>/tasks/<int:task_pk>/',

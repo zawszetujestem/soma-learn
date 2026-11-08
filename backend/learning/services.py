@@ -6,7 +6,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
-from .models import Course, CourseVersion, Instance, InstancePeriod, InstanceTask
+from .models import Course, CourseTask, CourseVersion, Instance, InstancePeriod, InstanceTask, InstanceCycle, InstanceCycleTask
 
 
 class DomainError(APIException):
@@ -79,8 +79,6 @@ def _check_write_access(user, instance):
     if instance.mentor_id == user.pk:
         return
     if instance.student_id == user.pk:
-        if instance.mentor_id is not None:
-            raise forbidden('Instancję z mentorem zmienia mentor.')
         return
     raise not_found()
 
@@ -169,9 +167,6 @@ def _join(user, course, *, via_token):
         if existing is not None:
             return existing, False
 
-        if Instance.objects.filter(student=user, status=Instance.Status.ACTIVE).exists():
-            raise conflict('slot_taken', 'Masz już aktywną instancję innego kursu.')
-
         try:
             with transaction.atomic():
                 instance = Instance.objects.create(
@@ -180,18 +175,20 @@ def _join(user, course, *, via_token):
                     student=user,
                     mentor=None if is_owner else course.owner,
                 )
-                InstanceTask.objects.bulk_create([
-                    InstanceTask(
+                plan = list(course.tasks.prefetch_related('prerequisites').all())
+                copies = {}
+                for task in plan:
+                    copies[task.pk] = InstanceTask.objects.create(
                         instance=instance,
                         title=task.title,
                         hours=task.hours,
                         position=task.position,
                     )
-                    for task in course.tasks.all()
-                ])
+                for task in plan:
+                    copies[task.pk].prerequisites.set(copies[p.pk] for p in task.prerequisites.all())
                 InstancePeriod.objects.create(instance=instance)
         except IntegrityError:
-            raise conflict('slot_taken', 'Masz już aktywną instancję innego kursu.')
+            raise conflict('slot_taken', 'Masz już aktywną instancję tego kursu.')
     return instance, True
 
 
@@ -202,6 +199,9 @@ def close_instance(user, instance):
         if locked.status == Instance.Status.CLOSED:
             raise conflict('already_closed', 'Instancja jest już zamknięta.')
         now = timezone.now()
+        cycle = locked.cycles.filter(ended_at__isnull=True).first()
+        if cycle:
+            _end_cycle(cycle, now)
         locked.status = Instance.Status.CLOSED
         locked.closed_at = now
         locked.save(update_fields=['status', 'closed_at'])
@@ -222,10 +222,11 @@ def resume_instance(user, instance):
             raise conflict('course_not_approved', 'Brak opublikowanej wersji.')
         if not course.is_active:
             raise conflict('course_inactive', 'Kurs jest nieaktywny.')
-        if Instance.objects.filter(student_id=locked.student_id, status=Instance.Status.ACTIVE).exclude(
+        if Instance.objects.filter(student_id=locked.student_id, course_id=locked.course_id,
+                                   status=Instance.Status.ACTIVE).exclude(
             pk=locked.pk,
         ).exists():
-            raise conflict('slot_taken', 'Masz już aktywną instancję innego kursu.')
+            raise conflict('slot_taken', 'Masz już aktywną instancję tego kursu.')
 
         now = timezone.now()
         locked.status = Instance.Status.ACTIVE
@@ -234,12 +235,77 @@ def resume_instance(user, instance):
             with transaction.atomic():
                 locked.save(update_fields=['status', 'closed_at'])
         except IntegrityError:
-            raise conflict('slot_taken', 'Masz już aktywną instancję innego kursu.')
+            raise conflict('slot_taken', 'Masz już aktywną instancję tego kursu.')
         InstancePeriod.objects.create(instance=locked, started_at=now)
     return locked
 
 
 def change_instance_task_status(user, instance, task, new_status):
+    return change_instance_task(user, instance, task, status=new_status)
+
+
+def validate_task_prerequisites(course_id, task_id, ids):
+    """Called under the course lock by authoring views; validate the explicit DAG."""
+    tasks = list(CourseTask.objects.filter(course_id=course_id).prefetch_related('prerequisites'))
+    graph = {task.pk: [p.pk for p in task.prerequisites.all()] for task in tasks}
+    invalid = (task_id in ids or any(pk not in graph for pk in ids))
+    if not invalid and task_id is not None:
+        pending, visited = list(ids), set()
+        while pending:
+            pk = pending.pop()
+            if pk == task_id:
+                invalid = True
+                break
+            if pk not in visited:
+                visited.add(pk)
+                pending.extend(graph[pk])
+    if invalid:
+        raise DomainError('invalid_prerequisite',
+                          'Wymagania muszą należeć do tego kursu i nie mogą tworzyć cyklu ani wskazywać samego zadania.',
+                          status_code=400)
+
+
+def task_blocked(task, target_status=None):
+    status = task.status if target_status is None else target_status
+    return status != InstanceTask.Status.DONE and any(
+        p.status != InstanceTask.Status.DONE for p in task.prerequisites.all()
+    )
+
+
+def _end_cycle(cycle, now):
+    for entry in cycle.entries.filter(removed_at__isnull=True).select_related('task'):
+        entry.status = entry.task.status
+        entry.save(update_fields=['status'])
+    cycle.ended_at = now
+    cycle.save(update_fields=['ended_at'])
+
+
+def start_cycle(user, instance):
+    with transaction.atomic():
+        locked = _lock_instance(instance.pk)
+        _check_write_access(user, locked)
+        if locked.status != Instance.Status.ACTIVE:
+            raise conflict('instance_closed', 'Zamknięta instancja jest tylko do odczytu.')
+        if locked.cycles.filter(ended_at__isnull=True).exists():
+            raise conflict('cycle_already_active', 'Ta instancja ma już aktywny cykl.')
+        InstanceCycle.objects.create(instance=locked)
+    return locked
+
+
+def close_cycle(user, instance, cycle_id):
+    with transaction.atomic():
+        locked = _lock_instance(instance.pk)
+        _check_write_access(user, locked)
+        cycle = locked.cycles.filter(pk=cycle_id).first()
+        if cycle is None:
+            raise not_found()
+        if cycle.ended_at is not None:
+            raise conflict('cycle_not_active', 'Ten cykl jest już zakończony.')
+        _end_cycle(cycle, timezone.now())
+    return locked
+
+
+def change_instance_task(user, instance, task, **changes):
     with transaction.atomic():
         locked = _lock_instance(instance.pk)
         _check_write_access(user, locked)
@@ -248,8 +314,36 @@ def change_instance_task_status(user, instance, task, new_status):
         task = InstanceTask.objects.filter(pk=task.pk, instance=locked).first()
         if task is None:
             raise not_found()
+        new_status = changes.get('status', task.status)
+        # Gating cannot be bypassed by marking an unavailable task Done.
+        unsatisfied = any(p.status != InstanceTask.Status.DONE for p in task.prerequisites.all())
+        if 'status' in changes and unsatisfied and new_status != 'todo':
+            raise conflict('task_blocked', 'Najpierw ukończ wszystkie wymagane zadania.')
+        cycle = locked.cycles.filter(ended_at__isnull=True).first()
+        if changes.get('selected') is True:
+            if cycle is None:
+                raise conflict('no_active_cycle', 'Najpierw rozpocznij cykl.')
+            if task_blocked(task, new_status):
+                raise conflict('task_blocked', 'Najpierw ukończ wszystkie wymagane zadania.')
         task.status = new_status
         task.save(update_fields=['status'])
+        if cycle:
+            entry = cycle.entries.filter(task=task).first()
+            if changes.get('selected') is True:
+                entry, _ = InstanceCycleTask.objects.update_or_create(
+                    cycle=cycle, task=task, defaults={'status': task.status, 'removed_at': None},
+                )
+            elif entry and entry.removed_at is None:
+                entry.status = task.status
+                if changes.get('selected') is False:
+                    entry.removed_at = timezone.now()
+                entry.save(update_fields=['status', 'removed_at'])
+            # Recompute availability for selected unfinished tasks after every status change.
+            for selected in cycle.entries.filter(removed_at__isnull=True).select_related('task').prefetch_related('task__prerequisites'):
+                if task_blocked(selected.task):
+                    selected.status = selected.task.status
+                    selected.removed_at = timezone.now()
+                    selected.save(update_fields=['status', 'removed_at'])
     return task
 
 
