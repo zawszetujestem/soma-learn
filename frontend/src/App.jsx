@@ -15,6 +15,8 @@ import MyCoursesPage from './courses/MyCoursesPage.jsx'
 import { RequireAuth, RequireManager } from './courses/RequireAuth.jsx'
 import SomaHomePage, { HomeLogo } from './home/HomePage.jsx'
 import useLogoutFlow from './useLogoutFlow.js'
+import InstanceSidebar from './courses/InstanceSidebar.jsx'
+import './courses/instance-page.css'
 
 function GuestOnly({ children }) {
   return getToken() ? <Navigate to="/kursy" replace /> : children
@@ -75,12 +77,16 @@ function NotFoundPage() {
 export default function App() {
   const { pathname } = useLocation()
   const logoutFlow = useLogoutFlow()
+  // Match only the instance detail route, never neighbouring/prefixed routes.
+  const instanceShell = logoutFlow.loggedIn && /^\/kursy\/instancje\/[^/]+\/?$/.test(pathname)
 
   if (pathname === '/') return <SomaHomePage logoutFlow={logoutFlow} />
 
   return (
-    <div className="app-shell">
-      <SiteHeader logoutFlow={logoutFlow} />
+    <div className={`app-shell${instanceShell ? ' instance-shell' : ''}`}>
+      {instanceShell
+        ? <InstanceSidebar logoutFlow={logoutFlow} />
+        : <SiteHeader logoutFlow={logoutFlow} />}
       <Routes>
         <Route element={<RequireAuth />}>
           <Route path="/kursy" element={<CoursesPage />} />
@@ -104,11 +110,11 @@ export default function App() {
         <Route path="/potwierdzenie-email/:key" element={<VerificationPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-      <footer className="site-footer">
+      {!instanceShell && <footer className="site-footer">
         <HomeLogo />
         <span>Małe kroki. Świadomy kierunek.</span>
         <a href="/#metoda">O podejściu SOMA <span aria-hidden="true">↗</span></a>
-      </footer>
+      </footer>}
     </div>
   )
 }

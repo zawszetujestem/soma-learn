@@ -2,7 +2,7 @@
 title: SOMA Learn — wytyczne stylu homepage i widoków produkcyjnych
 type: frontend-guidelines
 language: pl
-scope: "Homepage / oraz widoki produkcyjne auth, kursów, nauki ucznia, wspólny header/footer i NotFound"
+scope: "Homepage / oraz widoki produkcyjne auth, kursów, nauki ucznia, wspólny header/footer, route-local shell instancji ucznia i NotFound"
 ---
 
 # SOMA Learn — wytyczne stylu homepage i widoków produkcyjnych
@@ -70,6 +70,8 @@ Każda przykładowa karta homepage ma „Przykład”, zakres i poziom; sekcja w
 ## Implementacja i granice stylowania
 
 Kod: [HomePage.jsx](../frontend/src/home/HomePage.jsx), [home.css](../frontend/src/home/home.css), [fonts.css](../frontend/src/home/fonts.css), [App.jsx](../frontend/src/App.jsx), [app-shell.css](../frontend/src/app-shell.css), [main.jsx](../frontend/src/main.jsx). `.sl-home` pozostaje odrębnym layoutem `/`; `.app-shell` obejmuje pozostałe istniejące widoki produkcyjne. Scoped tokeny shellu mapują istniejące nazwy zmiennych na wspólny styl bez przebudowy formularzy i edytorów. Nie dodawaj globalnych nadpisań `body`, `html`, `:root` ani maskowania overflow.
+
+Wyjątek trasowy: dokładna, zalogowana trasa `/kursy/instancje/{id}` używa lokalnego sidebara zamiast wspólnego headera/footeru; pozostałe trasy zachowują wspólny shell. To ograniczenie układu jest potwierdzone implementacją i testami, nie rozszerza nawigacji o nieobsługiwane pozycje. Zachowuj opis funkcji oraz wyników QA tej trasy w [frontend README — tablica cykli](../frontend/README.md#tablica-cykli-i-postęp-lekcji-na-stronie-instancji).
 
 **Kolejność kaskady:** `main.jsx` importuje `styles.css`, następnie `app-shell.css`. Nie przenoś importu shellu do App przed style bazowe: niezależne QA ujawniło P2, w którym reguły bazowe wygrywały z nadpisaniami. Kolejność poprawiono i potwierdzono testem oraz stylami computed w przeglądarce.
 

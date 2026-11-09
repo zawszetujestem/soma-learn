@@ -25,7 +25,7 @@ describe('production tile shell', () => {
   it.each([
     '/logowanie', '/logowanie/reset-hasla', '/logowanie/google/callback',
     '/rejestracja', '/potwierdzenie-email', '/potwierdzenie-email/key', '/nie-ma',
-    '/kursy', '/kursy/1', '/kursy/instancje/1', '/kursy/dolacz/token',
+    '/kursy', '/kursy/1', '/kursy/dolacz/token',
     '/kursy/moje', '/kursy/moje/nowy', '/kursy/moje/1',
     '/kursy/moje/1/wersje/2/edytuj', '/kursy/podglad/1/wersje/2', '/course-moderation/',
   ])('uses the same accessible logo and landmarks on %s (including guards)', async (path) => {
@@ -44,6 +44,15 @@ describe('production tile shell', () => {
       expect(svg.querySelector('.sl-logo-learn')).toHaveAttribute('x', '136')
       expect(svg.querySelector('path, circle, image, use')).toBeNull()
     }
+  })
+
+  it('keeps the global login shell when an unauthenticated instance visit is guarded', async () => {
+    // Authenticated instance visits use the local shell (instance-redesign.test.jsx).
+    renderAt('/kursy/instancje/1')
+    expect(await screen.findByRole('heading', { name: /zaloguj/i })).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toHaveClass('site-header')
+    expect(screen.getByRole('contentinfo')).toHaveClass('site-footer')
+    expect(document.querySelector('.instance-shell, .instance-sidebar')).toBeNull()
   })
 
   it('preserves production nav order, active state, destinations and keyboard focus', async () => {

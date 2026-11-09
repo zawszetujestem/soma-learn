@@ -71,9 +71,11 @@ function InstanceView({ user, data, setData, id }) {
   return (
     <main className="courses-page page-width instance-page" aria-busy={busy}>
       <header className="courses-header">
+        <nav className="instance-breadcrumb" aria-label="Ścieżka kursu">
+          <Link to="/kursy">Kursy</Link><span aria-hidden="true">›</span><span>{content.title}</span>
+        </nav>
         <p className="eyebrow">{instanceStatusLabels[instance.status]}</p>
         <h1>{content.title}</h1>
-        <p>Postęp: <span>{formatPercent(instance.progress)}</span></p>
         <div className="course-actions">
           <Link className="text-link" to={`/kursy/${instance.course}`}>Wróć do kursu</Link>
           <Link className="text-link" to="/nauka">Moja nauka</Link>
@@ -89,8 +91,13 @@ function InstanceView({ user, data, setData, id }) {
       {error && <p className="courses-error" role="alert">{error}</p>}
       <p role="status" aria-live="polite" className={busy ? 'courses-status' : 'sr-only'}>{busy ? 'Zapisywanie zmian…' : ''}</p>
 
-      {canManage && (
-        <div className="course-actions instance-controls">
+      <LessonCycleBoard key={instance.id} instanceId={instance.id} content={content}
+        canEdit={canEdit} busy={busy} refreshKey={instance} />
+
+      <section className="course-section instance-controls" aria-label="Instancja kursu">
+        <h2>Instancja kursu</h2>
+        <p>Postęp zadań instancji: <span>{formatPercent(instance.progress)}</span></p>
+        {canManage && <div className="course-actions">
           {isActive && (
             <p className="instance-note">
               Możesz zakończyć kurs w dowolnym momencie, niezależnie od postępu. Zamknięcie instancji nie kończy cyklu lekcji. Aktywny cykl i plan zostaną zachowane w widoku tylko do odczytu, a kurs będzie można wznowić.
@@ -102,11 +109,8 @@ function InstanceView({ user, data, setData, id }) {
             onClose={() => mutate(() => coursesApi.closeInstance(instance.id))}
             onResume={() => mutate(() => coursesApi.resumeInstance(instance.id))}
           />
-        </div>
-      )}
-
-      <LessonCycleBoard key={instance.id} instanceId={instance.id} content={content}
-        canEdit={canEdit} busy={busy} refreshKey={instance} />
+        </div>}
+      </section>
 
       <VersionContent version={content} courseId={instance.course} student={content.course_owner !== user.id && !user.roles.includes('admin')} />
     </main>

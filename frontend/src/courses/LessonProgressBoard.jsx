@@ -63,12 +63,16 @@ export default function LessonProgressBoard({
               <header className="lesson-progress-topic-header">
                 <h4>{group.title}</h4>
                 <p>{completed} / {group.entries.length} ukończone</p>
+                <span className="instance-topic-progress" aria-hidden="true">
+                  <span style={{ width: `${Math.round(completed / group.entries.length * 100)}%` }} />
+                </span>
               </header>
               <div className="lesson-progress-topic-grid">
                 {lessonStatuses.map(([status, label]) => {
                   const statusEntries = group.entries.filter(({ lesson }) => progress(lesson.id).status === status)
                   return (
                     <section key={status} className="lesson-progress-column"
+                      data-status={status}
                       aria-label={`${label} — ${group.title}`}
                       onDragOver={event => {
                         if (!movable) return
@@ -82,7 +86,7 @@ export default function LessonProgressBoard({
                         const id = droppedId(event)
                         if (id !== null) move(id, status)
                       }}>
-                      <h5>{label}</h5>
+                      <h5>{label} <span className="instance-status-count">{statusEntries.length}</span></h5>
                       {!statusEntries.length && <p className="instance-note">Brak lekcji.</p>}
                       <ul className="lesson-progress-cards">
                         {statusEntries.map(({ lesson }) => {
@@ -92,6 +96,7 @@ export default function LessonProgressBoard({
                           const terminal = current.status === 'done'
                           return (
                             <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId} className="lesson-progress-card"
+                              data-status={current.status}
                               tabIndex={-1}
                               tileRef={element => { if (!canEdit || terminal) buttonRefs.current[lesson.id] = element }}
                               draggable={Boolean(editable)}
@@ -99,6 +104,7 @@ export default function LessonProgressBoard({
                                 event.dataTransfer.setData(dragType, String(lesson.id))
                                 event.dataTransfer.effectAllowed = 'move'
                               }}>
+                              <span className="instance-lesson-status">{label}</span>
                               {canEdit && <LessonStatusControl lesson={lesson} current={current}
                                 targets={targets} movable={movable} buttonRefs={buttonRefs} onMove={move} />}
                             </LessonTile>

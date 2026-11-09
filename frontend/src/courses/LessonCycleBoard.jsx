@@ -108,6 +108,7 @@ function AllLessonsList({ entries, progress, activeIds, plannedIds, planned, mov
               return (
                 <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId}
                   className="lesson-all-card"
+                  data-status={progress(lesson.id).status}
                   tabIndex={-1}
                   tileRef={element => {
                     if (isActive && (!canEdit || progress(lesson.id).status === 'done')) {
@@ -215,6 +216,10 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
   const plannedEntries = entries.filter(({ lesson }) => plannedIds.has(lesson.id))
   const backlog = entries.filter(({ lesson }) => !activeIds.has(lesson.id) && !plannedIds.has(lesson.id))
   const { progress, allowed } = lessonWorkflow(state.data)
+  // Count authoritative active assignments only, independently of content filtering
+  // and legacy instance-task progress. Missing progress means todo.
+  const completed = [...activeIds].filter(id => progress(id).status === 'done').length
+  const cyclePercent = activeIds.size ? Math.round(completed / activeIds.size * 100) : 0
   const add = id => mutate(() => coursesApi.addLessonToCycle(instanceId, planned.id, id), id)
   const remove = id => mutate(() => coursesApi.removeLessonFromCycle(instanceId, planned.id, id), id)
   function moveStatus(lessonId, status, previous) {
@@ -255,20 +260,38 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
       </p>
 
       <section className="lesson-cycle-zone" aria-label={lessonView === 'active' ? 'Aktywny cykl' : 'Widok wszystkich lekcji'}>
-        <h3 ref={activeHeadingRef} tabIndex={-1}>{lessonView === 'active' ? 'Aktywny cykl' : 'Wszystkie lekcje'}</h3>
-        {lessonView === 'active' && active && <p>{displayCycleDates(active)}</p>}
-        <div className="lesson-cycle-view-switch" role="group" aria-label="Widok lekcji">
-          <button type="button" className="button button-secondary" aria-pressed={lessonView === 'active'}
-            onClick={() => setLessonView('active')}>Tematy</button>
-          <button type="button" className="button button-secondary" aria-pressed={lessonView === 'all'}
-            onClick={() => setLessonView('all')}>Wszystkie</button>
+        <div className="instance-board-toolbar">
+          <div>
+            <h3 ref={activeHeadingRef} tabIndex={-1}>{lessonView === 'active' ? 'Aktywny cykl' : 'Wszystkie lekcje'}</h3>
+            {lessonView === 'active' && active && <p>{displayCycleDates(active)}</p>}
+          </div>
+          <div className="lesson-cycle-view-switch" role="group" aria-label="Widok lekcji">
+            <button type="button" className="button button-secondary" aria-pressed={lessonView === 'active'}
+              onClick={() => setLessonView('active')}>Tematy</button>
+            <button type="button" className="button button-secondary" aria-pressed={lessonView === 'all'}
+              onClick={() => setLessonView('all')}>Wszystkie</button>
+          </div>
+          {active && canEdit && <button type="button" className="button button-primary" disabled={!movable}
+            onClick={() => mutate(() => coursesApi.closeLessonCycle(instanceId, active.id), undefined, 'active')}>Zakończ cykl lekcji</button>}
         </div>
+        <section className="instance-cycle-metrics" aria-label="Postęp aktywnego cyklu">
+          <p className="instance-metric-label"><strong>Postęp cyklu</strong></p>
+          {active ? <>
+            <div className="instance-cycle-progress" role="progressbar" aria-label="Postęp cyklu"
+              aria-valuemin={0} aria-valuemax={100} aria-valuenow={cyclePercent}
+              aria-valuetext={`${completed} / ${activeIds.size} ukończonych lekcji (${cyclePercent}%)`}>
+              <span style={{ width: `${cyclePercent}%` }} />
+            </div>
+            <strong>{cyclePercent}%</strong>
+            <p>{completed} / {activeIds.size} ukończonych lekcji</p>
+          </> : <p>Brak aktywnego cyklu.</p>}
+        </section>
         {lessonView === 'active' ? active
           ? activeEntries.length ? <LessonProgressBoard entries={activeEntries} projection={state.data}
             courseId={content.course} versionId={content.id}
             canEdit={canEdit} movable={movable} buttonRefs={buttonRefs}
             onMove={moveStatus} /> : <EmptyMessage>Cykl nie zawiera lekcji.</EmptyMessage>
-          : <EmptyMessage>Brak aktywnego cyklu.</EmptyMessage>
+          : null
           : <section className="lesson-progress-all" aria-label="Wszystkie lekcje">
             {entries.length ? <AllLessonsList entries={entries} progress={progress}
               activeIds={activeIds} plannedIds={plannedIds} planned={planned} movable={movable}
@@ -277,10 +300,6 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
               courseId={content.course} versionId={content.id} />
               : <EmptyMessage>Brak lekcji w tej wersji.</EmptyMessage>}
           </section>}
-        {active && <>
-          {canEdit && <button type="button" className="button button-secondary" disabled={!movable}
-            onClick={() => mutate(() => coursesApi.closeLessonCycle(instanceId, active.id), undefined, 'active')}>Zakończ cykl lekcji</button>}
-        </>}
       </section>
 
       <section className="lesson-cycle-zone" aria-label="Plan kolejnego cyklu" onDragOver={dragOver} onDrop={dropToPlan}>

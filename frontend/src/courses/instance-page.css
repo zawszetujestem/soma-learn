@@ -1,0 +1,280 @@
+/* Only the exact authenticated instance route receives this root class.
+   Higher specificity than the shared shell, including when it loads last.
+   The lesson modal portal deliberately stays outside these rules. */
+.app-shell.instance-shell {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  align-items: start;
+  background: #fff;
+}
+.app-shell.instance-shell .instance-sidebar {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+  min-height: 100svh;
+  max-height: 100svh;
+  overflow-y: auto;
+  padding: 1.25rem .75rem;
+  background: linear-gradient(160deg, #fff, var(--sl-periwinkle));
+  border-right: 1px solid var(--sl-line);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.app-shell.instance-shell .instance-sidebar .sl-logo { width: 100%; }
+.app-shell.instance-shell .instance-sidebar nav { display: grid; gap: .5rem; }
+.app-shell.instance-shell .instance-sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  min-height: 44px;
+  padding: .5rem .75rem;
+  border-radius: .6rem;
+  text-decoration: none;
+  color: var(--sl-ink);
+  font-size: .875rem;
+  font-weight: 650;
+}
+.app-shell.instance-shell .instance-sidebar nav a span { font-size: 1.2rem; }
+.app-shell.instance-shell .instance-sidebar nav a:hover { background: #fff; }
+.app-shell.instance-shell .instance-sidebar nav a[aria-current="page"] {
+  color: #fff;
+  background: var(--sl-blue);
+  box-shadow: 0 3px 8px #2936c826;
+}
+.app-shell.instance-shell .instance-logout { margin-top: auto; }
+.app-shell.instance-shell > main {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: clamp(1rem, 2.5vw, 2rem);
+}
+.app-shell.instance-shell .instance-page {
+  display: grid;
+  gap: 1.5rem;
+}
+.app-shell.instance-shell .instance-page > .courses-header {
+  padding: 0 0 1rem;
+  border: 0;
+  border-bottom: 1px solid var(--sl-line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.app-shell.instance-shell .instance-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  font-size: .8rem;
+  margin-bottom: .75rem;
+}
+.app-shell.instance-shell .instance-breadcrumb a { text-decoration: none; }
+.app-shell.instance-shell .instance-page h1 {
+  margin: .25rem 0 .75rem;
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+}
+.app-shell.instance-shell .instance-page h2 { font-size: 1.25rem; }
+.app-shell.instance-shell .instance-page h3 { font-size: 1.05rem; }
+.app-shell.instance-shell .instance-page h4 { font-size: 1rem; }
+.app-shell.instance-shell .instance-page .eyebrow { margin: 0; }
+.app-shell.instance-shell .instance-page .course-actions { gap: .75rem; }
+.app-shell.instance-shell .instance-page .button {
+  min-height: 44px;
+  padding: .5rem .85rem;
+  border-radius: .6rem;
+  font-size: .8rem;
+}
+.app-shell.instance-shell .instance-note {
+  font-size: .8rem;
+  color: #50546b;
+  margin-block: .5rem;
+}
+.app-shell.instance-shell .instance-page > .lesson-cycle-board {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  gap: 1rem;
+}
+.app-shell.instance-shell .lesson-cycle-board > h2 { margin: 0; }
+.app-shell.instance-shell .instance-cycle-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem 1.25rem;
+  padding: 1rem;
+  background: linear-gradient(120deg, #f8f9ff, var(--sl-periwinkle));
+  border-radius: .85rem;
+  margin-bottom: 1rem;
+}
+.app-shell.instance-shell .instance-cycle-metrics :is(h3, p) { margin: 0; }
+.app-shell.instance-shell .instance-cycle-metrics p { font-size: .85rem; }
+.app-shell.instance-shell .instance-cycle-progress,
+.app-shell.instance-shell .instance-topic-progress {
+  display: block;
+  background: #d7dbea;
+  border-radius: 1rem;
+  height: .6rem;
+}
+.app-shell.instance-shell .instance-cycle-progress { flex: 1 1 10rem; max-width: 22rem; }
+.app-shell.instance-shell .instance-cycle-progress > span,
+.app-shell.instance-shell .instance-topic-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--sl-blue);
+  border-radius: inherit;
+}
+.app-shell.instance-shell .lesson-cycle-zone {
+  border-color: var(--sl-line);
+  padding: 1rem;
+}
+.app-shell.instance-shell .lesson-cycle-zone[aria-label="Aktywny cykl"],
+.app-shell.instance-shell .lesson-cycle-zone[aria-label="Widok wszystkich lekcji"] {
+  border: 0;
+  padding: 0;
+}
+.app-shell.instance-shell .instance-board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1rem;
+  margin-bottom: 1rem;
+}
+.app-shell.instance-shell .instance-board-toolbar :is(h3, p) { margin: 0; }
+.app-shell.instance-shell .instance-board-toolbar p { color: #50546b; font-size: .8rem; }
+.app-shell.instance-shell .lesson-cycle-view-switch {
+  margin: 0;
+  padding: .2rem;
+  gap: .2rem;
+  border: 1px solid var(--sl-line);
+  border-radius: .75rem;
+  background: #f8f9ff;
+}
+.app-shell.instance-shell .lesson-cycle-view-switch .button { border-color: transparent; background: transparent; }
+.app-shell.instance-shell .lesson-cycle-view-switch .button[aria-pressed="true"] {
+  background: var(--sl-blue);
+  color: #fff;
+}
+.app-shell.instance-shell .lesson-progress-summaries {
+  padding: .75rem;
+  border: 1px solid var(--sl-line);
+  border-radius: .75rem;
+  background: #f8f9ff;
+}
+.app-shell.instance-shell .lesson-progress-summaries h4 { margin: 0; font-size: .85rem; }
+.app-shell.instance-shell .lesson-progress-summaries p { margin: .25rem 0 0; font-size: .75rem; color: #50546b; }
+.app-shell.instance-shell .lesson-progress-topic,
+.app-shell.instance-shell .lesson-all-topic {
+  padding: .6rem;
+  border-color: var(--sl-line);
+  background: #fff;
+  box-shadow: 0 4px 12px #20243a08;
+}
+.app-shell.instance-shell .lesson-progress-topic-header {
+  align-items: center;
+  justify-content: start;
+  padding: .5rem .75rem;
+  background: linear-gradient(120deg, #f8f9ff, #f0f2fa);
+  border: 1px solid var(--sl-line);
+  border-radius: .6rem;
+}
+.app-shell.instance-shell .lesson-progress-topic-header p { margin-left: auto; font-size: .75rem; }
+.app-shell.instance-shell .instance-topic-progress { width: 5rem; height: .4rem; }
+/* The five columns share a grid per topic: titles and cards always scroll together.
+   A minimum card width applies even on large viewports with a narrow content pane. */
+.app-shell.instance-shell .lesson-progress-topic-grid {
+  grid-template-columns: repeat(5, minmax(11rem, 1fr));
+  align-items: stretch;
+  gap: .4rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  padding: .25rem;
+}
+.app-shell.instance-shell .lesson-progress-column {
+  border-color: #e5e7f0;
+  background: linear-gradient(#fff, #f9faff);
+  padding: .5rem;
+}
+.app-shell.instance-shell .lesson-progress-column h5 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  margin: 0 0 .75rem;
+  min-height: 2rem;
+  font-size: .85rem;
+}
+.app-shell.instance-shell .instance-status-count {
+  padding: .05rem .4rem;
+  border-radius: 1rem;
+  color: var(--status-ink, var(--sl-ink));
+  background: var(--status-paper, #edf0f7);
+}
+.app-shell.instance-shell [data-status="todo"] { --status-ink: #50546b; --status-paper: #edf0f7; --status-line: #d9d9df; }
+.app-shell.instance-shell [data-status="revision"] { --status-ink: #a53117; --status-paper: #fff0e9; --status-line: #edac98; }
+.app-shell.instance-shell [data-status="in_progress"] { --status-ink: #2936c8; --status-paper: #e8ebff; --status-line: #a5b1ff; }
+.app-shell.instance-shell [data-status="review"] { --status-ink: #6930b0; --status-paper: #f2eaff; --status-line: #cbb0ed; }
+.app-shell.instance-shell [data-status="done"] { --status-ink: #24622a; --status-paper: #eaf5e7; --status-line: #b6d5b8; }
+.app-shell.instance-shell .lesson-progress-cards { margin: 0; gap: .6rem; }
+.app-shell.instance-shell .lesson-progress-card,
+.app-shell.instance-shell .lesson-all-card {
+  border: 1px solid var(--status-line);
+  background: linear-gradient(140deg, #fff, var(--status-paper));
+  border-radius: .7rem;
+  padding: .65rem;
+  gap: .5rem;
+  box-shadow: 0 3px 7px #20243a0a;
+}
+.app-shell.instance-shell .lesson-tile-opener {
+  font-size: .85rem;
+  font-weight: 750;
+  color: var(--sl-ink);
+}
+.app-shell.instance-shell .instance-lesson-status,
+.app-shell.instance-shell .lesson-all-status {
+  justify-self: start;
+  border-radius: .4rem;
+  padding: .15rem .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--status-ink);
+  background: var(--status-paper);
+}
+.app-shell.instance-shell .lesson-tile select {
+  min-height: 44px;
+  padding: .4rem;
+  border: 1px solid #75788c;
+  border-radius: .5rem;
+  font-size: .8rem;
+  background: #fff;
+  color: var(--sl-ink);
+}
+.app-shell.instance-shell .lesson-tile select:disabled { background: #edf0f7; color: #50546b; opacity: 1; }
+.app-shell.instance-shell .lesson-all-card .lesson-tile-opener { flex-basis: 12rem; }
+.app-shell.instance-shell .instance-controls { padding: 1rem; }
+.app-shell.instance-shell .instance-controls h2 { margin-top: 0; }
+.app-shell.instance-shell .instance-controls .instance-note { flex-basis: 100%; }
+.app-shell.instance-shell .lesson-cycle-dates input { padding: .4rem; border: 1px solid #75788c; border-radius: .5rem; font: inherit; }
+@media (max-width: 760px) {
+  .app-shell.instance-shell { grid-template-columns: minmax(0, 1fr); }
+  .app-shell.instance-shell .instance-sidebar {
+    position: static;
+    min-height: 0;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--sl-line);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem 1rem;
+  }
+  .app-shell.instance-shell .instance-sidebar .sl-logo { width: 8rem; }
+  .app-shell.instance-shell .instance-sidebar nav { display: flex; flex-wrap: wrap; gap: .25rem; order: 1; width: 100%; }
+  .app-shell.instance-shell .instance-sidebar nav a { padding: .4rem .6rem; }
+  .app-shell.instance-shell .instance-logout { margin: 0 0 0 auto; }
+  .app-shell.instance-shell .instance-cycle-metrics { gap: .5rem .75rem; }
+  .app-shell.instance-shell .instance-cycle-metrics .instance-metric-label { flex-basis: 100%; }
+  .app-shell.instance-shell .instance-board-toolbar > .button { width: 100%; }
+}
