@@ -4,6 +4,7 @@ import { useLoader } from './RequireAuth.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
 import LessonProgressBoard from './LessonProgressBoard.jsx'
 import LessonTile from './LessonTile.jsx'
+import LessonStatusControl, { lessonStatuses, lessonWorkflow } from './LessonStatusControl.jsx'
 import './lesson-cycle-board.css'
 
 // Calendar dates, never UTC timestamps. Noon avoids DST midnight discontinuities.
@@ -81,54 +82,65 @@ function PlanDates({ planned, disabled, onSave }) {
 }
 
 const dragType = 'application/x-soma-lesson-id'
-function LessonList({ entries, action, movable, onMove, onDragStart, buttonRefs, courseId, versionId }) {
-  return (
-    <ul className="lesson-cycle-list">
-      {entries.map(({ lesson }) => (
-        <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId}
-          draggable={Boolean(movable)} onDragStart={event => {
-          event.dataTransfer.setData(dragType, String(lesson.id))
-          event.dataTransfer.effectAllowed = 'move'
-          onDragStart?.(lesson.id)
-        }}>
-          {action && (
-            <button ref={element => { if (buttonRefs) buttonRefs.current[lesson.id] = element }}
-              type="button" className="button button-secondary" disabled={!movable}
-              aria-label={`${action}: ${lesson.title}`} onClick={() => onMove(lesson.id)}>
-              {action}
-            </button>
-          )}
-        </LessonTile>
-      ))}
-    </ul>
-  )
-}
+const progressLabels = Object.fromEntries(lessonStatuses)
 
-function GroupedBacklog({ entries, ...listProps }) {
-  const sections = new Map()
+function AllLessonsList({ entries, progress, activeIds, plannedIds, planned, movable,
+  canEdit, add, remove, allowed, onStatusMove, buttonRefs, courseId, versionId }) {
+  const groups = new Map()
   for (const entry of entries) {
-    const sectionKey = entry.section?.id ?? 'none'
-    if (!sections.has(sectionKey)) sections.set(sectionKey, { section: entry.section, topics: new Map() })
-    const topics = sections.get(sectionKey).topics
-    const topicKey = entry.topic?.id ?? 'none'
-    if (!topics.has(topicKey)) topics.set(topicKey, { topic: entry.topic, entries: [] })
-    topics.get(topicKey).entries.push(entry)
+    const key = entry.topic?.id ?? `section-${entry.section?.id ?? 'none'}`
+    if (!groups.has(key)) groups.set(key, {
+      key, title: entry.topic?.title ?? entry.section?.title ?? 'Lekcje bez tematu', entries: [],
+    })
+    groups.get(key).entries.push(entry)
   }
-  return [...sections].map(([key, { section, topics }]) => (
-    <div className="lesson-cycle-section" key={key}>
-      {section && <h4>{section.title}</h4>}
-      {[...topics].map(([topicKey, group]) => (
-        <div className="lesson-cycle-topic" key={topicKey}>
-          {group.topic && <h5>{group.topic.title}</h5>}
-          <LessonList entries={group.entries} {...listProps} />
-        </div>
+  return (
+    <div className="lesson-all-groups">
+      {[...groups.values()].map(group => (
+        <section key={group.key} className="lesson-all-topic" aria-label={group.title}>
+          <h4>{group.title}</h4>
+          <ul className="lesson-cycle-list">
+            {group.entries.map(({ lesson }) => {
+              const isActive = activeIds.has(lesson.id)
+              const isPlanned = plannedIds.has(lesson.id)
+              const canPlan = canEdit && Boolean(planned) && !isActive
+              const action = !canPlan ? null : isPlanned ? 'Usuń z planu' : 'Dodaj do planu'
+              return (
+                <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId}
+                  className="lesson-all-card"
+                  tabIndex={-1}
+                  tileRef={element => {
+                    if (isActive && (!canEdit || progress(lesson.id).status === 'done')) {
+                      buttonRefs.current[lesson.id] = element
+                    }
+                  }}
+                  draggable={Boolean(canPlan && movable)}
+                  onDragStart={event => {
+                    event.dataTransfer.setData(dragType, String(lesson.id))
+                    event.dataTransfer.effectAllowed = 'move'
+                  }}>
+                  <span className="lesson-all-status">{progressLabels[progress(lesson.id).status] || progressLabels.todo}</span>
+                  {canEdit && isActive && <LessonStatusControl lesson={lesson} current={progress(lesson.id)}
+                    targets={allowed(lesson.id)} movable={movable} onMove={onStatusMove} buttonRefs={buttonRefs} />}
+                  {action && <button ref={element => { buttonRefs.current[lesson.id] = element }}
+                    type="button" className="button button-secondary" disabled={!movable}
+                    aria-label={`${action}: ${lesson.title}`}
+                    onClick={() => (isPlanned ? remove : add)(lesson.id)}>
+                    {action}
+                  </button>}
+                </LessonTile>
+              )
+            })}
+          </ul>
+        </section>
       ))}
     </div>
-  ))
+  )
 }
 
 export default function LessonCycleBoard({ instanceId, content, canEdit, busy: instanceBusy = false, refreshKey }) {
   const state = useLoader(() => coursesApi.getLessonCycles(instanceId), [instanceId, refreshKey])
+  const [lessonView, setLessonView] = useState('active')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [announcement, setAnnouncement] = useState('')
@@ -202,20 +214,26 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
   const activeEntries = entries.filter(({ lesson }) => activeIds.has(lesson.id))
   const plannedEntries = entries.filter(({ lesson }) => plannedIds.has(lesson.id))
   const backlog = entries.filter(({ lesson }) => !activeIds.has(lesson.id) && !plannedIds.has(lesson.id))
+  const { progress, allowed } = lessonWorkflow(state.data)
   const add = id => mutate(() => coursesApi.addLessonToCycle(instanceId, planned.id, id), id)
   const remove = id => mutate(() => coursesApi.removeLessonFromCycle(instanceId, planned.id, id), id)
+  function moveStatus(lessonId, status, previous) {
+    if (!activeIds.has(lessonId) || !allowed(lessonId).includes(status)) return
+    return mutate(() => coursesApi.updateLessonProgress(
+      instanceId, active.id, lessonId,
+      { status, expected_status: previous.status, expected_revision: previous.revision },
+    ), lessonId, 'active', true)
+  }
 
-  function drop(event, toPlan) {
+  function dropToPlan(event) {
     event.preventDefault()
     if (!movable || !planned || inFlight.current) return
     const value = event.dataTransfer.getData(dragType)
     if (!/^\d+$/.test(value)) return
     const id = Number(value)
     // Ignore external/unpinned IDs and attempts to move an active assignment.
-    const source = toPlan ? backlog : plannedEntries
-    if (!source.some(({ lesson }) => lesson.id === id)) return
-    if (toPlan) add(id)
-    else remove(id)
+    if (!backlog.some(({ lesson }) => lesson.id === id)) return
+    add(id)
   }
   function dragOver(event) {
     if (movable && planned) {
@@ -236,29 +254,42 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
         {busy ? 'Zapisywanie cyklu lekcji…' : announcement}
       </p>
 
-      <section className="lesson-cycle-zone" aria-label="Aktywny cykl">
-        <h3 ref={activeHeadingRef} tabIndex={-1}>Aktywny cykl</h3>
-        {active ? <>
-          <p>{displayCycleDates(active)}</p>
-          {activeEntries.length ? <LessonProgressBoard entries={activeEntries} projection={state.data}
+      <section className="lesson-cycle-zone" aria-label={lessonView === 'active' ? 'Aktywny cykl' : 'Widok wszystkich lekcji'}>
+        <h3 ref={activeHeadingRef} tabIndex={-1}>{lessonView === 'active' ? 'Aktywny cykl' : 'Wszystkie lekcje'}</h3>
+        {lessonView === 'active' && active && <p>{displayCycleDates(active)}</p>}
+        <div className="lesson-cycle-view-switch" role="group" aria-label="Widok lekcji">
+          <button type="button" className="button button-secondary" aria-pressed={lessonView === 'active'}
+            onClick={() => setLessonView('active')}>Tematy</button>
+          <button type="button" className="button button-secondary" aria-pressed={lessonView === 'all'}
+            onClick={() => setLessonView('all')}>Wszystkie</button>
+        </div>
+        {lessonView === 'active' ? active
+          ? activeEntries.length ? <LessonProgressBoard entries={activeEntries} projection={state.data}
             courseId={content.course} versionId={content.id}
             canEdit={canEdit} movable={movable} buttonRefs={buttonRefs}
-            onMove={(lessonId, status, previous) => mutate(() => coursesApi.updateLessonProgress(
-              instanceId, active.id, lessonId,
-              { status, expected_status: previous.status, expected_revision: previous.revision },
-            ), lessonId, 'active', true)} /> : <EmptyMessage>Cykl nie zawiera lekcji.</EmptyMessage>}
+            onMove={moveStatus} /> : <EmptyMessage>Cykl nie zawiera lekcji.</EmptyMessage>
+          : <EmptyMessage>Brak aktywnego cyklu.</EmptyMessage>
+          : <section className="lesson-progress-all" aria-label="Wszystkie lekcje">
+            {entries.length ? <AllLessonsList entries={entries} progress={progress}
+              activeIds={activeIds} plannedIds={plannedIds} planned={planned} movable={movable}
+              canEdit={canEdit} add={add} remove={remove} buttonRefs={buttonRefs}
+              allowed={allowed} onStatusMove={moveStatus}
+              courseId={content.course} versionId={content.id} />
+              : <EmptyMessage>Brak lekcji w tej wersji.</EmptyMessage>}
+          </section>}
+        {active && <>
           {canEdit && <button type="button" className="button button-secondary" disabled={!movable}
             onClick={() => mutate(() => coursesApi.closeLessonCycle(instanceId, active.id), undefined, 'active')}>Zakończ cykl lekcji</button>}
-        </> : <EmptyMessage>Brak aktywnego cyklu.</EmptyMessage>}
+        </>}
       </section>
 
-      <section className="lesson-cycle-zone" aria-label="Plan kolejnego cyklu" onDragOver={dragOver} onDrop={event => drop(event, true)}>
+      <section className="lesson-cycle-zone" aria-label="Plan kolejnego cyklu" onDragOver={dragOver} onDrop={dropToPlan}>
         <h3 ref={planHeadingRef} tabIndex={-1}>Plan kolejnego cyklu</h3>
         {planned ? <>
           <p>{displayCycleDates(planned)}</p>
-          {plannedEntries.length ? <LessonList entries={plannedEntries} action={canEdit ? 'Usuń z planu' : null}
-            courseId={content.course} versionId={content.id}
-            movable={movable} onMove={remove} buttonRefs={buttonRefs} /> : <EmptyMessage>Plan nie zawiera lekcji.</EmptyMessage>}
+          {plannedEntries.length
+            ? <p className="instance-note">Wybrane lekcje i akcje planu są dostępne w widoku „Wszystkie”.</p>
+            : <EmptyMessage>Plan nie zawiera lekcji.</EmptyMessage>}
         </> : <EmptyMessage>Brak planu kolejnego cyklu. Utwórz plan, aby przypisać lekcje.</EmptyMessage>}
         {canEdit && <PlanDates key={`${planned?.id || 'new'}:${planned?.start_date}:${planned?.end_date}`}
           planned={planned} disabled={!movable}
@@ -272,15 +303,6 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
         </>}
       </section>
 
-      <section className="lesson-cycle-zone" aria-label="Pozostałe lekcje" onDragOver={dragOver} onDrop={event => drop(event, false)}>
-        <h3>Pozostałe lekcje</h3>
-        {canEdit && planned && <p className="instance-note">Przeciągnij pojedynczą lekcję do planu lub użyj przycisku „Dodaj do planu”. Z planu możesz ją odłożyć przyciskiem lub przeciągnięciem.</p>}
-        {!entries.length ? <EmptyMessage>Brak lekcji w tej wersji.</EmptyMessage>
-          : !backlog.length ? <EmptyMessage>Wszystkie lekcje są przypisane do cykli.</EmptyMessage>
-            : <GroupedBacklog entries={backlog} action={canEdit && planned ? 'Dodaj do planu' : null}
-              courseId={content.course} versionId={content.id}
-              movable={movable && Boolean(planned)} onMove={add} buttonRefs={buttonRefs} />}
-      </section>
     </section>
   )
 }

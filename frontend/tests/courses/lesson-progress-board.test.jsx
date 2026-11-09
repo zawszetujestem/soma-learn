@@ -18,7 +18,12 @@ function setup(data = projection(), handlers = {}, props = {}) {
   return api
 }
 const active = () => screen.getByRole('region', { name: 'Aktywny cykl' })
-const column = name => within(active()).getByRole('region', { name })
+const column = name => within(active()).getAllByRole('region')
+  .find(region => region.getAttribute('aria-label')?.startsWith(`${name} —`))
+const statusCards = name => within(active()).getAllByRole('region')
+  .filter(region => region.getAttribute('aria-label')?.startsWith(`${name} —`))
+  .flatMap(region => within(region).queryAllByRole('listitem'))
+const waitColumn = name => waitFor(() => expect(column(name)).toBeTruthy())
 const card = title => within(active()).getByRole('listitem', { name: title })
 const selector = title => within(card(title)).getByRole('combobox', { name: `Zmień status: ${title}` })
 const patches = calls => calls.filter(c => c.method === 'PATCH')
@@ -69,9 +74,12 @@ it.each([
   expect(calls.map(c => c.method)).toEqual(['GET'])
 })
 
-it.each(locations.flatMap(location => ['click', 'Enter', 'Space', 'tile'].map(mode => [location, mode])))(
+it.each(['Aktywny cykl', 'Wszystkie lekcje'].flatMap(location => ['click', 'Enter', 'Space', 'tile'].map(mode => [location, mode])))(
   '%s: %s otwiera modal, Escape przywraca fokus, tło jest inert i Tab pozostaje wewnątrz', async (location, mode) => {
     const { calls } = setup(locatedProjection(location), {}, { content: previewContent, canEdit: false })
+    if (location === 'Wszystkie lekcje') {
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    }
     const scope = await screen.findByRole('region', { name: location })
     const trigger = opener(scope)
     expect(trigger.tagName).toBe('BUTTON')
@@ -149,7 +157,7 @@ it('zmiana selecta statusu zapisuje wyłącznie status i nie otwiera modala', as
 
 it('podgląd pustej lekcji pokazuje stan pusty bez zapisu', async () => {
   const { calls } = setup()
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   await userEvent.setup().click(opener())
   expect(within(preview()).getByText('Brak materiałów w tej lekcji.')).toBeVisible()
   expect(patches(calls)).toHaveLength(0)
@@ -169,7 +177,7 @@ it('załącznik pobiera leniwie z przypiętej wersji, pokazuje ładowanie, błą
   const { calls } = setup(projection(), {
     [`GET ${assetPath}`]: () => new Promise(resolve => { release = resolve }),
   }, { content })
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   expect(calls).toHaveLength(1)
   await userEvent.setup().click(opener())
   expect(within(preview()).getByText('Ładowanie załącznika…')).toBeVisible()
@@ -187,7 +195,7 @@ it('select nie otwiera modala ani nie rozpoczyna drag/drop, a drag karty nie otw
   const { calls } = setup(projection(), {
     [`PATCH ${path(9)}`]: ok(projection([progress(9, 'in_progress')])),
   }, { content: previewContent })
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   const store = {}
   const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
   await userEvent.setup().click(selector('Lekcja Z'))
@@ -210,7 +218,8 @@ it.each(['Usuń z planu', 'Dodaj do planu'])('%s pozostaje niezależną akcją; 
   const method = removing ? 'DELETE' : 'POST'
   const url = `${ROOT}6/lessons/${removing ? '9/' : ''}`
   const { calls } = setup(before, { [`${method} ${url}`]: ok(after) }, { content: previewContent })
-  const scope = await screen.findByRole('region', { name: removing ? locations[1] : locations[2] })
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+  const scope = screen.getByRole('region', { name: 'Wszystkie lekcje' })
   const item = within(scope).getByRole('listitem', { name: 'Lekcja Z' })
   const actionButton = within(item).getByRole('button', { name: `${action}: Lekcja Z` })
   const store = {}
@@ -229,20 +238,26 @@ it.each(['Usuń z planu', 'Dodaj do planu'])('%s pozostaje niezależną akcją; 
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 
-it.each([locations[1], locations[2]])('%s: drop zachowuje planowanie, bez otwierania modala', async location => {
+it.each([locations[1], locations[2]])('%s: drop w All nie usuwa z planu, drop backlogu do planu dodaje bez modala', async location => {
   const removing = location === locations[1]
   const before = locatedProjection(location)
   const after = locatedProjection(removing ? locations[2] : locations[1])
   const method = removing ? 'DELETE' : 'POST'
   const url = `${ROOT}6/lessons/${removing ? '9/' : ''}`
   const { calls } = setup(before, { [`${method} ${url}`]: ok(after) }, { content: previewContent })
-  const scope = await screen.findByRole('region', { name: location })
+  await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+  const scope = screen.getByRole('region', { name: 'Wszystkie lekcje' })
   const item = within(scope).getByRole('listitem', { name: 'Lekcja Z' })
   const store = {}
   const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
   fireEvent.dragStart(item, { dataTransfer })
-  fireEvent.drop(screen.getByRole('region', { name: removing ? locations[2] : locations[1] }), { dataTransfer })
-  await waitFor(() => expect(calls.filter(c => c.method !== 'GET')).toHaveLength(1))
+  fireEvent.drop(removing ? screen.getByRole('region', { name: 'Wszystkie lekcje' }) : screen.getByRole('region', { name: 'Plan kolejnego cyklu' }), { dataTransfer })
+  if (removing) {
+    expect(calls.filter(c => c.method !== 'GET')).toHaveLength(0)
+    expect(within(scope).getByRole('button', { name: 'Usuń z planu: Lekcja Z' })).toBeEnabled()
+  } else {
+    await waitFor(() => expect(calls.filter(c => c.method !== 'GET')).toHaveLength(1))
+  }
   expect(screen.queryByRole('dialog')).toBeNull()
 })
 
@@ -265,7 +280,7 @@ it.each(['select', 'drag/drop'])('in_progress→todo przez %s używa CAS i zwaln
   const { calls } = setup(projection([progress(9, 'in_progress', 6)]), {
     [`PATCH ${path(9)}`]: ok(projection([progress(9, 'todo', 7)])),
   })
-  await screen.findByRole('region', { name: 'W trakcie' })
+  await waitColumn('W trakcie')
   expect(selector('Lekcja A')).toBeDisabled()
   if (method === 'select') {
     await userEvent.setup().selectOptions(selector('Lekcja Z'), 'todo')
@@ -286,7 +301,7 @@ it('konflikt cofnięcia do todo odświeża bez replay i utrzymuje globalny lock'
     [`GET ${ROOT}`]: () => ok(projection([progress(9, 'in_progress', gets++ ? 8 : 6)])),
     [`PATCH ${path(9)}`]: fail(409, { code: 'invalid_lesson_transition', message: 'Ta zmiana nie jest dozwolona.' }),
   })
-  await screen.findByRole('region', { name: 'W trakcie' })
+  await waitColumn('W trakcie')
   await userEvent.setup().selectOptions(selector('Lekcja Z'), 'todo')
   expect(await screen.findByRole('alert')).toHaveTextContent('Ta zmiana nie jest dozwolona.')
   await waitFor(() => expect(gets).toBe(2))
@@ -297,9 +312,10 @@ it('konflikt cofnięcia do todo odświeża bez replay i utrzymuje globalny lock'
 
 it('pokazuje pięć kolumn w kolejności, tylko selected, tematy i domyślne todo/revision=0', async () => {
   const { calls } = setup(projection(), { [`PATCH ${path(3)}`]: ok(projection([progress(3, 'in_progress')])) })
-  await screen.findByRole('region', { name: labels[0] })
-  expect(within(active()).getAllByRole('region').filter(r => labels.includes(r.getAttribute('aria-label'))).map(r => r.getAttribute('aria-label'))).toEqual(labels)
-  expect(within(column('Do zrobienia')).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))).toEqual(['Lekcja Z', 'Lekcja A', 'Lekcja B'])
+  await screen.findByRole('region', { name: 'Temat Z' })
+  expect(within(active()).getAllByRole('region').filter(r => r.getAttribute('aria-label')?.endsWith(' — Temat Z'))
+    .map(r => r.getAttribute('aria-label'))).toEqual(labels.map(label => `${label} — Temat Z`))
+  expect(within(active()).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))).toEqual(['Lekcja Z', 'Lekcja A', 'Lekcja B'])
   expect(within(active()).queryByText('Lekcja C')).toBeNull()
   expect(within(active()).queryByText('Temat B')).toBeNull()
   expect(within(active()).getByRole('region', { name: 'Podsumowanie tematów' })).toHaveTextContent('Do zrobienia: 2')
@@ -307,6 +323,29 @@ it('pokazuje pięć kolumn w kolejności, tylko selected, tematy i domyślne tod
   await waitFor(() => expect(patches(calls)).toHaveLength(1))
   expect(patches(calls)[0].body).toEqual({ status: 'in_progress', expected_status: 'todo', expected_revision: 0 })
   expect(await screen.findByRole('status')).toHaveTextContent('Zapisano status lekcji.')
+})
+
+it('układa statusy w pięciu komórkach każdej sekcji tematu', async () => {
+  setup()
+  await screen.findByRole('region', { name: 'Temat Z' })
+  const topic = within(active()).getByRole('region', { name: 'Temat Z' })
+  expect(within(topic).getAllByRole('region').map(region => region.getAttribute('aria-label'))).toEqual(
+    labels.map(label => `${label} — Temat Z`),
+  )
+  expect(within(topic).getAllByRole('listitem').map(item => item.getAttribute('aria-label'))).toEqual([
+    'Lekcja Z', 'Lekcja A',
+  ])
+})
+
+it('statusy i karty pozostają przypisane do właściwego tematu, a licznik ukończeń jest lokalny', async () => {
+  setup(projection([progress(9, 'done'), progress(7, 'in_progress')]))
+  const topicZ = await screen.findByRole('region', { name: 'Temat Z' })
+  const topicA = screen.getByRole('region', { name: 'Temat A' })
+  expect(within(topicZ).getByRole('region', { name: 'Zakończone — Temat Z' }))
+    .toHaveTextContent('Lekcja Z')
+  expect(within(topicZ).getByText('1 / 2 ukończone')).toBeInTheDocument()
+  expect(within(topicA).getByRole('region', { name: 'W trakcie — Temat A' }))
+    .toHaveTextContent('Lekcja B')
 })
 
 it('wylicza status tematów z całej selekcji: all-done, in_progress lub summary review/revision/todo; ukrywa pusty', async () => {
@@ -329,7 +368,7 @@ it('klawiaturą zgłasza review, zwalnia globalny lock, rozpoczyna dowolną nast
     [`PATCH ${path(9)}`]: options => ok(JSON.parse(options.body).status === 'review' ? submitted : finished),
     [`PATCH ${path(3)}`]: ok(next),
   })
-  await screen.findByRole('region', { name: 'W trakcie' })
+  await waitColumn('W trakcie')
   expect(selector('Lekcja A')).toBeDisabled()
   expect(screen.getByRole('region', { name: 'Podsumowanie tematów' })).toHaveTextContent('W trakcie')
   const user = userEvent.setup()
@@ -340,7 +379,7 @@ it('klawiaturą zgłasza review, zwalnia globalny lock, rozpoczyna dowolną nast
   await user.selectOptions(selector('Lekcja A'), 'in_progress')
   await waitFor(() => expect(within(column('W trakcie')).getByText('Lekcja A')).toBeInTheDocument())
   await user.selectOptions(selector('Lekcja Z'), 'done')
-  await waitFor(() => expect(within(column('Zakończone')).getAllByRole('listitem')).toHaveLength(2))
+  await waitFor(() => expect(statusCards('Zakończone')).toHaveLength(2))
   expect(within(card('Lekcja Z')).queryByRole('combobox')).toBeNull()
   expect(card('Lekcja Z')).toHaveFocus()
   expect(patches(calls).map(c => c.body)).toEqual([
@@ -353,7 +392,7 @@ it('klawiaturą zgłasza review, zwalnia globalny lock, rozpoczyna dowolną nast
 it('native drag/drop pozwala tylko na legalne przejścia i nie przywraca done', async () => {
   const data = projection([progress(9, 'revision', 2), progress(7, 'done')])
   const { calls } = setup(data, { [`PATCH ${path(9)}`]: ok(projection([progress(9, 'in_progress', 3), progress(7, 'done')])) })
-  await screen.findByRole('region', { name: 'Do poprawy' })
+  await waitColumn('Do poprawy')
   const store = {}
   const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
   fireEvent.dragStart(card('Lekcja Z'), { dataTransfer })
@@ -368,7 +407,7 @@ it('native drag/drop pozwala tylko na legalne przejścia i nie przywraca done', 
 
 it('blokuje start także gdy globalne in_progress leży poza aktywną selekcją', async () => {
   const { calls } = setup(projection([progress(888, 'in_progress', 4)]))
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   expect(within(active()).getByText(/poza aktywnym cyklem/i)).toBeInTheDocument()
   expect(selector('Lekcja Z')).toBeDisabled()
   fireEvent.change(selector('Lekcja Z'), { target: { value: 'in_progress' } })
@@ -383,7 +422,7 @@ it.each(['stale_lesson_progress', 'invalid_lesson_transition', 'lesson_in_progre
       [`GET ${ROOT}`]: () => ok(gets++ ? refreshed : projection([progress(9, 'review', 3)])),
       [`PATCH ${path(9)}`]: fail(409, { code, message: 'Stan zmieniony. <b>Odśwież</b> tablicę.' }),
     })
-    await screen.findByRole('region', { name: 'Do sprawdzenia' })
+    await waitColumn('Do sprawdzenia')
     await userEvent.setup().selectOptions(selector('Lekcja Z'), 'done')
     expect(await screen.findByRole('alert')).toHaveTextContent('Stan zmieniony. <b>Odśwież</b> tablicę.')
     await waitFor(() => expect(within(column('Zakończone')).getByText('Lekcja Z')).toBeInTheDocument())
@@ -398,7 +437,7 @@ it('pending blokuje wszystkie aktualizacje i ogłasza zapis; błąd nie zmienia 
   const { calls } = setup(projection(), {
     [`PATCH ${path(9)}`]: () => new Promise(resolve => { release = resolve }),
   })
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   await userEvent.setup().selectOptions(selector('Lekcja Z'), 'in_progress')
   expect(selector('Lekcja A')).toBeDisabled()
   expect(screen.getByText('Zapisywanie cyklu lekcji…')).toHaveAttribute('role', 'status')
@@ -406,7 +445,7 @@ it('pending blokuje wszystkie aktualizacje i ogłasza zapis; błąd nie zmienia 
   expect(patches(calls)).toHaveLength(1)
   release(fail(500, { message: 'Spróbuj później.' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Spróbuj później.')
-  expect(within(column('Do zrobienia')).getAllByRole('listitem')).toHaveLength(3)
+  expect(statusCards('Do zrobienia')).toHaveLength(3)
 })
 
 it.each([STUDENT, MENTOR])('ta sama trasa dla przypisanego użytkownika $id; test pozostaje treścią i review ma ręczne revision/done', async user => {
@@ -419,7 +458,7 @@ it.each([STUDENT, MENTOR])('ta sama trasa dla przypisanego użytkownika $id; tes
     [`PATCH ${path(9)}`]: ok(projection([progress(9, 'revision', 2)])),
   })
   renderApp('/kursy/instancje/11')
-  await screen.findByRole('region', { name: 'Do sprawdzenia' })
+  await waitColumn('Do sprawdzenia')
   const contentRegion = within(screen.getByRole('region', { name: 'Treść wersji' }))
   await userEvent.setup().click(contentRegion.getByRole('button', { name: 'Lekcja: Lekcja Z' }))
   expect(contentRegion.getByText(/Pytanie testowe/)).toBeVisible()
@@ -437,7 +476,7 @@ it.each(['closed', 'unassigned'])('read-only: %s nie wysyła statusów ani drag/
     'GET /api/instances/11/content/': ok(CONTENT), [`GET ${ROOT}`]: ok(projection()),
   })
   renderApp('/kursy/instancje/11')
-  await screen.findByRole('region', { name: 'Do zrobienia' })
+  await waitColumn('Do zrobienia')
   expect(within(active()).queryByRole('combobox')).toBeNull()
   expect(card('Lekcja Z')).toHaveAttribute('draggable', 'false')
   fireEvent.drop(column('W trakcie'), { dataTransfer: { getData: () => '9' } })
@@ -455,8 +494,8 @@ it('done z wcześniejszego cyklu pozostaje terminalne po wczytaniu nowego cyklu 
     ...projection([progress(9, 'done', 12), progress(3, 'done', 4)]),
     active_cycle: cycle(15, [9, 3], { status: 'active' }),
   })
-  await screen.findByRole('region', { name: 'Zakończone' })
-  expect(within(column('Zakończone')).getAllByRole('listitem')).toHaveLength(2)
+  await waitColumn('Zakończone')
+  expect(statusCards('Zakończone')).toHaveLength(2)
   expect(within(active()).queryByRole('combobox')).toBeNull()
   expect(screen.getByRole('region', { name: 'Podsumowanie tematów' })).toHaveTextContent('Ukończony')
   fireEvent.drop(column('W trakcie'), { dataTransfer: { getData: () => '9' } })
@@ -472,7 +511,7 @@ it('nieudane odświeżenie po konflikcie blokuje zapis do udanego GET; retry nie
     },
     [`PATCH ${path(9)}`]: fail(409, { code: 'stale_lesson_progress', message: 'Nieaktualna wersja.' }),
   })
-  await screen.findByRole('region', { name: 'Do sprawdzenia' })
+  await waitColumn('Do sprawdzenia')
   const user = userEvent.setup()
   await user.selectOptions(selector('Lekcja Z'), 'done')
   expect(await screen.findByText(/Projekcja niedostępna/)).toBeInTheDocument()
@@ -492,10 +531,13 @@ it('po sukcesie zastępuje całą projekcję serwerową, także selekcję i plan
     planned_cycle: cycle(6, [7]),
   }
   setup(projection([progress(9, 'in_progress', 3)]), { [`PATCH ${path(9)}`]: ok(authoritative) })
-  await screen.findByRole('region', { name: 'W trakcie' })
+  await waitColumn('W trakcie')
   await userEvent.setup().selectOptions(selector('Lekcja Z'), 'review')
-  await waitFor(() => expect(within(column('Zakończone')).getByText('Lekcja C')).toBeInTheDocument())
+  await waitFor(() => expect(within(active()).getByRole('region', { name: 'Zakończone — Temat B' })).toHaveTextContent('Lekcja C'))
   expect(within(active()).queryByText('Lekcja A')).toBeNull()
   expect(within(active()).queryByText('Lekcja B')).toBeNull()
-  expect(within(screen.getByRole('region', { name: 'Plan kolejnego cyklu' })).getByText('Lekcja B')).toBeInTheDocument()
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Wszystkie' }))
+  const all = screen.getByRole('region', { name: 'Wszystkie lekcje' })
+  expect(within(all).getByRole('listitem', { name: 'Lekcja B' })).toHaveTextContent('Do zrobienia')
+  expect(within(all).getByRole('button', { name: 'Usuń z planu: Lekcja B' })).toBeInTheDocument()
 })

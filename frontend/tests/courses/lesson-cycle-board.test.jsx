@@ -15,14 +15,107 @@ const region = name => screen.getByRole('region', { name })
 const mutations = calls => calls.filter(c => c.method !== 'GET')
 
 describe('cykle lekcji', () => {
-  it('mapuje tylko lekcje, zachowuje kolejność drzewa i grupuje backlog w działy/tematy', async () => {
+  it('Wszystkie pokazuje każdą lekcję kursu dokładnie raz, w kolejności programu', async () => {
     setup({ ...BOTH, active_cycle: cycle(5, [3, 9], { status: 'active' }), planned_cycle: cycle(6) })
-    await screen.findByText('Lekcja Z')
+    await screen.findByRole('button', { name: 'Wszystkie' })
     expect(within(region('Aktywny cykl')).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))).toEqual(['Lekcja Z', 'Lekcja A'])
-    const backlog = within(region('Pozostałe lekcje'))
-    expect(backlog.getAllByRole('heading').map(h => h.textContent)).toEqual(['Pozostałe lekcje', 'Dział B', 'Temat A', 'Dział A', 'Temat B'])
-    expect(backlog.queryByText('Lekcja Z')).toBeNull()
-    expect(within(region('Plan kolejnego cyklu')).getByText(/plan nie zawiera lekcji/i)).toBeInTheDocument()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const all = await screen.findByRole('region', { name: 'Wszystkie lekcje' })
+    const cardTitles = within(all).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))
+    expect(cardTitles).toEqual(['Lekcja Z', 'Lekcja A', 'Lekcja B', 'Lekcja C'])
+    expect(new Set(cardTitles).size).toBe(4)
+    expect(within(region('Plan kolejnego cyklu')).queryByRole('listitem')).toBeNull()
+  })
+
+  it('Wszystkie zachowuje rzeczywisty status; tylko active ma status controls, planned ma akcję usuń, backlog dodaj', async () => {
+    const data = {
+      ...BOTH,
+      lesson_progress: [
+        { lesson_id: 3, status: 'review', revision: 2 },
+        { lesson_id: 7, status: 'done', revision: 4 },
+        { lesson_id: 8, status: 'in_progress', revision: 5 },
+      ],
+    }
+    const { calls } = setup(data)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const all = region('Wszystkie lekcje')
+    expect(within(all).getByRole('listitem', { name: 'Lekcja Z' })).toHaveTextContent('Do zrobienia')
+    expect(within(all).getByRole('listitem', { name: 'Lekcja A' })).toHaveTextContent('Do sprawdzenia')
+    expect(within(all).getByRole('listitem', { name: 'Lekcja B' })).toHaveTextContent('Zakończone')
+    expect(within(all).getByRole('listitem', { name: 'Lekcja C' })).toHaveTextContent('W trakcie')
+    expect(within(all).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(all).getAllByRole('combobox')).toHaveLength(1)
+    expect(within(all).getByRole('combobox', { name: 'Zmień status: Lekcja Z' })).toBeDisabled()
+    for (const title of ['Lekcja A', 'Lekcja B', 'Lekcja C']) {
+      expect(within(within(all).getByRole('listitem', { name: title })).queryByRole('combobox')).toBeNull()
+    }
+    expect(within(all).getByRole('button', { name: 'Usuń z planu: Lekcja A' })).toBeEnabled()
+    expect(within(all).getByRole('button', { name: 'Dodaj do planu: Lekcja B' })).toBeEnabled()
+    expect(calls.map(call => call.method)).toEqual(['GET'])
+    await user.click(screen.getByRole('button', { name: 'Tematy' }))
+    const activeTopic = within(region('Aktywny cykl')).getByRole('region', { name: 'Temat Z' })
+    expect(within(activeTopic).getByRole('combobox', { name: 'Zmień status: Lekcja Z' })).toBeInTheDocument()
+    expect(within(activeTopic).queryByRole('button', { name: /dodaj do planu|usuń z planu/i })).toBeNull()
+  })
+
+  it('Wszystkie ma nagłówek kursu bez dat aktywnego cyklu', async () => {
+    setup()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const view = region('Widok wszystkich lekcji')
+    expect(within(view).getByRole('heading', { name: 'Wszystkie lekcje', level: 3 })).toBeVisible()
+    expect(within(view).queryByText(displayCycleDates(BOTH.active_cycle))).toBeNull()
+  })
+
+  it('Wszystkie zapisuje status active przez CAS i zachowuje limit jednej in_progress', async () => {
+    const initial = { ...BOTH, active_cycle: cycle(5, [9, 7], { status: 'active' }) }
+    const updated = { ...initial, lesson_progress: [{ lesson_id: 9, status: 'in_progress', revision: 1 }] }
+    const { calls } = setup(initial, {
+      [`PATCH ${ROOT}5/lessons/9/progress/`]: ok(updated),
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const select = title => within(region('Wszystkie lekcje')).getByRole('combobox', { name: `Zmień status: ${title}` })
+    expect(select('Lekcja B')).toBeEnabled()
+    await user.selectOptions(select('Lekcja Z'), 'in_progress')
+    await waitFor(() => expect(select('Lekcja Z')).toHaveValue('in_progress'))
+    expect(select('Lekcja Z')).toHaveFocus()
+    expect(select('Lekcja B')).toBeDisabled()
+    expect(within(select('Lekcja Z')).getAllByRole('option').map(option => option.value)).toEqual(['in_progress', 'todo', 'review'])
+    expect(mutations(calls)).toEqual([expect.objectContaining({
+      method: 'PATCH', path: `${ROOT}5/lessons/9/progress/`,
+      body: { status: 'in_progress', expected_status: 'todo', expected_revision: 0 },
+    })])
+  })
+
+  it.each([false, true])('Wszystkie respektuje read-only/pending: busy=%s', async busy => {
+    setup(BOTH, {}, { canEdit: busy, busy })
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const controls = within(region('Wszystkie lekcje'))
+    if (busy) expect(controls.getByRole('combobox', { name: 'Zmień status: Lekcja Z' })).toBeDisabled()
+    else expect(controls.queryByRole('combobox')).toBeNull()
+  })
+
+  it('Wszystkie po konflikcie odświeża progress bez replay i zachowuje terminalne done', async () => {
+    let gets = 0
+    const initial = { ...BOTH, lesson_progress: [{ lesson_id: 9, status: 'review', revision: 3 }] }
+    const fresh = { ...BOTH, lesson_progress: [{ lesson_id: 9, status: 'done', revision: 4 }] }
+    const { calls } = setup(initial, {
+      [`GET ${ROOT}`]: () => ok(gets++ ? fresh : initial),
+      [`PATCH ${ROOT}5/lessons/9/progress/`]: fail(409, { code: 'stale_lesson_progress' }),
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    await user.selectOptions(within(region('Wszystkie lekcje')).getByRole('combobox', {
+      name: 'Zmień status: Lekcja Z',
+    }), 'done')
+    await screen.findByRole('alert')
+    await waitFor(() => expect(within(region('Wszystkie lekcje')).queryByRole('combobox')).toBeNull())
+    const card = within(region('Wszystkie lekcje')).getByRole('listitem', { name: 'Lekcja Z' })
+    expect(card).toHaveTextContent('Zakończone')
+    expect(card).toHaveFocus()
+    expect(gets).toBe(2)
+    expect(mutations(calls)).toHaveLength(1)
   })
 
   it('daty date-only pokazuje z exclusive end, bez przesunięć UTC / DST', () => {
@@ -150,24 +243,28 @@ describe('cykle lekcji', () => {
       [`DELETE ${ROOT}6/lessons/7/`]: ok(BOTH),
     })
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' }))
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const all = region('Wszystkie lekcje')
+    await user.click(within(all).getByRole('button', { name: 'Dodaj do planu: Lekcja B' }))
     const remove = await screen.findByRole('button', { name: 'Usuń z planu: Lekcja B' })
-    expect(within(region('Pozostałe lekcje')).queryByText('Lekcja B')).toBeNull()
+    expect(within(all).getAllByRole('listitem').filter(item => item.getAttribute('aria-label') === 'Lekcja B')).toHaveLength(1)
     await user.click(remove)
     expect(await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' })).toBeEnabled()
     expect(mutations(calls).map(c => [c.method, c.path, c.body])).toEqual([
       ['POST', `${ROOT}6/lessons/`, { lesson_id: 7 }],
       ['DELETE', `${ROOT}6/lessons/7/`, undefined],
     ])
-    expect(within(region('Aktywny cykl')).queryByRole('button', { name: /usuń|dodaj/i })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Tematy' }))
+    expect(within(region('Aktywny cykl')).getByRole('region', { name: 'Temat Z' })
+      .querySelector('button[aria-label*="plan"]')).toBeNull()
   })
 
-  it('DnD backlog ↔ plan ma ten sam kontrakt; obce/aktywne lekcje nie są przenoszone', async () => {
+  it('DnD dodaje backlog do planu; obce/aktywne lekcje nie są przenoszone', async () => {
     const { calls } = setup(BOTH, {
       [`POST ${ROOT}6/lessons/`]: ok({ ...BOTH, planned_cycle: cycle(6, [3, 7]) }),
       [`DELETE ${ROOT}6/lessons/7/`]: ok(BOTH),
     })
-    await screen.findByText('Lekcja B')
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
     const store = {}
     const dataTransfer = { setData: (k, v) => { store[k] = v }, getData: k => store[k] || '', effectAllowed: '', dropEffect: '' }
     const card = screen.getByRole('button', { name: 'Dodaj do planu: Lekcja B' }).closest('li')
@@ -175,13 +272,28 @@ describe('cykle lekcji', () => {
     fireEvent.dragStart(card, { dataTransfer })
     fireEvent.dragOver(region('Plan kolejnego cyklu'), { dataTransfer })
     fireEvent.drop(region('Plan kolejnego cyklu'), { dataTransfer })
-    const planned = (await screen.findByRole('button', { name: 'Usuń z planu: Lekcja B' })).closest('li')
-    fireEvent.dragStart(planned, { dataTransfer })
-    fireEvent.drop(region('Pozostałe lekcje'), { dataTransfer })
-    await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' })
+    await screen.findByRole('button', { name: 'Usuń z planu: Lekcja B' })
     fireEvent.drop(region('Plan kolejnego cyklu'), { dataTransfer: { getData: () => '999' } })
     fireEvent.drop(region('Plan kolejnego cyklu'), { dataTransfer: { getData: () => '9' } })
-    expect(mutations(calls)).toHaveLength(2)
+    expect(mutations(calls)).toEqual([
+      expect.objectContaining({ method: 'POST', path: `${ROOT}6/lessons/`, body: { lesson_id: 7 } }),
+    ])
+  })
+
+  it.each(['lista', 'karta'])('przypadkowy drop planned w Wszystkie (%s) nie usuwa lekcji z planu', async target => {
+    const { calls } = setup(BOTH, {
+      [`DELETE ${ROOT}6/lessons/3/`]: ok({ ...BOTH, planned_cycle: cycle(6) }),
+    })
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    const all = region('Wszystkie lekcje')
+    const planned = within(all).getByRole('listitem', { name: 'Lekcja A' })
+    const store = {}
+    const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
+    fireEvent.dragStart(planned, { dataTransfer })
+    fireEvent.drop(target === 'lista' ? all : within(all).getByRole('listitem', { name: 'Lekcja B' }), { dataTransfer })
+    fireEvent.dragEnd(planned, { dataTransfer })
+    expect(mutations(calls)).toHaveLength(0)
+    expect(within(all).getByRole('button', { name: 'Usuń z planu: Lekcja A' })).toBeEnabled()
   })
 
   it('klawiatura Enter/Space przenosi lekcję bez DnD i zachowuje fokus na równoważnej akcji', async () => {
@@ -190,6 +302,7 @@ describe('cykle lekcji', () => {
       [`DELETE ${ROOT}6/lessons/7/`]: ok(BOTH),
     })
     const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
     const add = await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' })
     add.focus()
     await user.keyboard('{Enter}')
@@ -211,7 +324,7 @@ describe('cykle lekcji', () => {
     expect(mutations(calls)).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Zakończ cykl lekcji' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Rozpocznij cykl lekcji' })).toBeEnabled())
-    expect(within(region('Plan kolejnego cyklu')).getByText('Lekcja A')).toBeInTheDocument()
+    expect(within(region('Plan kolejnego cyklu')).queryByRole('listitem')).toBeNull()
     expect(within(region('Aktywny cykl')).getByText(/brak aktywnego cyklu/i)).toBeInTheDocument()
     expect(mutations(calls)).toHaveLength(1)
     await user.click(screen.getByRole('button', { name: 'Rozpocznij cykl lekcji' }))
@@ -245,6 +358,9 @@ describe('cykle lekcji', () => {
       remove: [BOTH, `DELETE ${ROOT}6/lessons/3/`, 'Usuń z planu: Lekcja A'],
     }[action]
     setup(config[0], { [config[1]]: fail(409, { message: 'Konflikt cyklu lekcji.' }) })
+    if (action === 'add' || action === 'remove') {
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    }
     await userEvent.setup().click(await screen.findByRole('button', { name: config[2] }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Konflikt cyklu lekcji.')
     expect(screen.getByRole('button', { name: config[2] })).toBeEnabled()
@@ -252,13 +368,17 @@ describe('cykle lekcji', () => {
       ? screen.getByRole('button', { name: config[2] })
       : screen.getByRole('heading', { name: action === 'start' || action === 'close' ? 'Aktywny cykl' : 'Plan kolejnego cyklu', level: 3 })
     await waitFor(() => expect(focusTarget).toHaveFocus())
-    expect(within(region('Pozostałe lekcje')).getByText('Lekcja B')).toBeInTheDocument()
+    if (action === 'add' || action === 'remove') {
+      expect(within(region('Wszystkie lekcje')).getAllByRole('listitem', { name: 'Lekcja B' })).toHaveLength(1)
+    }
   })
 
   it('podczas zapisu blokuje button, daty i DnD', async () => {
     let finish
     const { calls } = setup(BOTH, { [`POST ${ROOT}6/lessons/`]: () => new Promise(resolve => { finish = () => resolve(ok(BOTH)) }) })
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' }))
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    await user.click(await screen.findByRole('button', { name: 'Dodaj do planu: Lekcja B' }))
     expect(screen.getByRole('status')).toHaveTextContent(/zapisywanie cyklu lekcji/i)
     expect(screen.getByRole('button', { name: 'Zakończ cykl lekcji' })).toBeDisabled()
     expect(screen.getByLabelText('Początek planu')).toBeDisabled()
@@ -272,22 +392,25 @@ describe('cykle lekcji', () => {
   it('read-only oferuje tylko przyciski podglądu, bez dat/akcji/DnD i nie reaguje na drop', async () => {
     const { calls } = setup(BOTH, {}, { canEdit: false })
     await screen.findByText('Lekcja Z')
-    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
-      'Otwórz lekcję: Lekcja Z', 'Otwórz lekcję: Lekcja A', 'Otwórz lekcję: Lekcja B', 'Otwórz lekcję: Lekcja C',
-    ])
+    expect(screen.getAllByRole('button', { name: 'Wszystkie' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /dodaj do planu|usuń z planu/i })).toBeNull()
     expect(screen.queryByLabelText('Początek planu')).toBeNull()
-    expect(within(region('Pozostałe lekcje')).getAllByRole('listitem')[0]).toHaveAttribute('draggable', 'false')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Wszystkie' }))
+    expect(within(region('Wszystkie lekcje')).getAllByRole('listitem')[0]).toHaveAttribute('draggable', 'false')
     fireEvent.drop(region('Plan kolejnego cyklu'), { dataTransfer: { getData: () => '7' } })
     expect(mutations(calls)).toHaveLength(0)
   })
 
   it('pusta przypięta hierarchia ma komunikat bez CourseTask', async () => {
     setup(EMPTY, {}, { content: { ...CONTENT, nodes: [] } })
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
     expect(await screen.findByText(/brak lekcji w tej wersji/i)).toBeInTheDocument()
   })
 
-  it('backlog bez pozostałych lekcji ma osobny pusty stan', async () => {
+  it('zaplanowane lekcje nadal są widoczne w Wszystkie', async () => {
     setup({ ...BOTH, planned_cycle: cycle(6, [3, 7, 8]) })
-    expect(await screen.findByText(/wszystkie lekcje są przypisane/i)).toBeInTheDocument()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Wszystkie' }))
+    expect(within(region('Wszystkie lekcje')).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(region('Plan kolejnego cyklu')).queryByRole('listitem')).toBeNull()
   })
 })
