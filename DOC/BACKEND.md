@@ -79,6 +79,7 @@ Rejestracja nowego konta.
 - `role` — "student" lub "mentor"
 - Mentorzy muszą podać `specialization`
 - Email weryfikacyjny wysyłany automatycznie
+- Błędy walidacji zachowują status `400` i szczegóły pól oraz zawierają niepuste, bezpieczne dla użytkownika `message`.
 
 #### `POST /api/auth/login/`
 
@@ -128,14 +129,14 @@ Token przekazuje się jako `Authorization: Token <token>`. Frontend przechowuje 
 - Konto musi być aktywne i mieć potwierdzony email. Funkcja jest dostępna dla wszystkich ról, także admin, staff i superuser, bez dodatkowych ograniczeń dla kont uprzywilejowanych.
 - Reset hasła Headless i legacy oraz każda inna zmiana zapisanego hasha hasła unieważniają zaufania wszystkich profili przez niezgodność fingerprintu. Rekordy nie są wtedy od razu fizycznie kasowane. Zmiana `SECRET_KEY` również unieważnia zaufania.
 - Cookie jest poświadczeniem typu bearer, nie dowodem posiadania konkretnego urządzenia: skopiowane przed unieważnieniem może służyć do pominięcia OTP w innym profilu, ale nadal wymaga poprawnego hasła. Nie należy włączać opcji na współdzielonym urządzeniu/profilu.
-- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po utracie/wygaśnięciu sesji, o ile nie wykonano wylogowania i nadal trwa TTL. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
+- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po utracie/wygaśnięciu sesji lub po wylogowaniu, jeśli nadal trwa TTL. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
 - Google i formularz `/admin/` pozostają bez zmian; formularz Django admin już wcześniej nie wymagał OTP. Nie jest to wdrożenie pełnego MFA ani pełny audyt bezpieczeństwa.
 
 #### Wylogowanie (allauth Headless)
 
-`DELETE /_allauth/browser/v1/auth/session` kończy sesję i usuwa cookie `soma_trusted_browser` oraz odpowiadający mu rekord serwerowy, także gdy sesja już wygasła. Replay cofniętego cookie nie pomija OTP; inne profile zachowują zaufanie. Żądania przeglądarkowe nadal wymagają CSRF.
+`DELETE /_allauth/browser/v1/auth/session` kończy sesję, ale zachowuje cookie `soma_trusted_browser` i odpowiadający mu rekord serwerowy do końca pierwotnego TTL, także gdy sesja już wygasła. Ponowne logowanie w tym profilu nadal wymaga hasła, ale może pominąć OTP do wygaśnięcia zaufania. Zmiana hasła lub wygaśnięcie unieważnia zaufanie zgodnie z regułami powyżej. Żądania przeglądarkowe nadal wymagają CSRF.
 
-Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że serwer mógł nie zakończyć sesji/cofnąć zaufania, i udostępnia „Ponów wylogowanie”. Samo usunięcie tokenu z karty nie potwierdza unieważnienia po stronie serwera.
+Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że serwer mógł nie zakończyć sesji; zaufanie przeglądarki pozostaje ważne do końca pierwotnego TTL. Interfejs udostępnia „Ponów wylogowanie”. Samo usunięcie tokenu z karty nie potwierdza zakończenia sesji po stronie serwera.
 
 **Istniejące ryzyko:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; cofnięcie zaufania przeglądarki nie rozwiązuje tego problemu.
 
@@ -334,6 +335,48 @@ Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesj�
 | GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; bez kluczy dla ucznia i mentora |
 
 Podstawowe endpointy kursów, zadań planu i instancji pozostają dostępne pod `/api/courses/` i `/api/instances/` (tworzenie i lista kursów, dołączanie, zadania `CourseTask`, plan godzinowy, status i cykl życia instancji). Są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Legacy `POST /api/courses/{id}/resubmit/` pozostaje zgodnościowym endpointem operującym na odrzuconej wersji; nowy klient powinien używać wersjonowanego `.../submit/`.
+
+### Cykle lekcji instancji i trwały postęp
+
+`InstanceLessonProgress` przechowuje stan dla pary **(instancja, lekcja)**, niezależnie od wyboru lekcji do cyklu. Zmiana lub zamknięcie cyklu, usunięcie lekcji z planu czy jej ponowne wybranie nie resetuje postępu. To osobny model od `CourseTask`, `InstanceCycleTask` i ich endpointów; testy pozostają treścią lekcji, bez zapisu prób ani automatycznego oceniania.
+
+Statusy postępu: `todo`, `revision`, `in_progress`, `review`, `done`. Dozwolona ścieżka to `todo` lub `revision` → `in_progress` → `review` → `revision` lub `done`; `done` jest końcowy. Dla każdej instancji może być najwyżej jedna lekcja `in_progress`. Status `revision` oznacza „do poprawy”; licznik `revision` w projekcji jest odrębnym numerem rewizji rekordu postępu, zaczyna się od `1` przy pierwszym zapisie i rośnie po każdej zaakceptowanej zmianie.
+
+#### Projekcja
+
+`GET /api/instances/{id}/lesson-cycles/` oraz udana mutacja cyklu/postępu zwracają projekcję z polem `lesson_progress`, którego elementy mają postać `{lesson_id, status, revision}`. Projekcja obejmuje zapisany postęp i lekcje wybrane w cyklach instancji. Brak zapisanego postępu dla lekcji oznacza `status: "todo"` i `revision: 0`; sam odczyt nie tworzy rekordu. Wartości postępu są przypisane do instancji i lekcji, nie do bieżącego cyklu.
+
+#### Zmiana postępu
+
+`PATCH /api/instances/{id}/lesson-cycles/{cycle_id}/lessons/{lesson_id}/progress/`
+
+Żądanie wymaga wszystkich trzech pól:
+
+```json
+{
+  "status": "in_progress",
+  "expected_status": "todo",
+  "expected_revision": 0
+}
+```
+
+`status` jest żądanym stanem; `expected_status` i `expected_revision` muszą odpowiadać aktualnemu stanowi. To preconditions chroniące przed nadpisaniem nowszej zmiany. Pierwsze przejście z domyślnego `todo`/rewizji `0` tworzy rekord z rewizją `1`; odpowiedź `200` zawiera aktualną projekcję. Polecenie jest dostępne uczniowi instancji i przypisanemu jej mentorowi, gdy lekcja należy do przypiętej wersji, jest wybrana w aktywnym cyklu, a sama instancja nie jest zamknięta. Zamknięta instancja pozostaje tylko do odczytu.
+
+Konflikty zwracają `409` z kodem:
+
+| Kod | Znaczenie |
+|---|---|
+| `stale_lesson_progress` | `expected_status` lub `expected_revision` nie odpowiada aktualnemu postępowi |
+| `invalid_lesson_transition` | Żądane przejście nie jest dozwolone |
+| `lesson_in_progress_exists` | Inna lekcja tej instancji ma już status `in_progress` |
+| `lesson_cycle_not_active` | Cykl lekcji nie jest aktywny |
+| `instance_closed` | Instancja jest zamknięta |
+
+Odpowiedzi błędów zawierają bezpieczne, niepuste `message`; nie należy opierać obsługi klienta na tekście komunikatu zamiast kodzie. Brak dostępu do instancji lub niewybranie lekcji w przekazanym aktywnym cyklu skutkuje `404 not_found`; nieaktywny cykl zwraca `409 lesson_cycle_not_active`. Niepoprawne lub brakujące pola żądania zwracają `400 validation_error`.
+
+#### Migracja i wymóg operacyjny
+
+Migracja `backend/learning/migrations/0008_instance_lesson_progress.py` (zależna od `0007_lesson_cycles`) jest addytywna: dodaje tabelę i ograniczenia postępu, nie zmienia istniejących cykli ani nie tworzy domyślnych rekordów `todo`. Przed udostępnieniem API/tej funkcji należy zastosować migracje przez `python manage.py migrate`. W chwili aktualizacji dokumentacji migracja nie była zastosowana do aplikacyjnej bazy danych; wdrożenie i migracja produkcyjnej bazy nie zostały wykonane.
 
 ### Błędy API
 

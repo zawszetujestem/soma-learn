@@ -48,7 +48,7 @@ class LessonCycleFixture:
     def projection(self, response, status=200):
         self.assertEqual(response.status_code, status, response.content)
         data = response.json()
-        self.assertEqual(set(data), {'active_cycle', 'planned_cycle', 'history'})
+        self.assertEqual(set(data), {'active_cycle', 'planned_cycle', 'history', 'lesson_progress'})
         return data
 
     def planned(self):
@@ -63,7 +63,7 @@ class LessonCycleFixture:
 class LessonCycleAPITests(LessonCycleFixture, TestCase):
     def test_empty_and_default_calendar_range(self):
         self.assertEqual(self.projection(self.client.get(self.base)), {
-            'active_cycle': None, 'planned_cycle': None, 'history': [],
+            'active_cycle': None, 'planned_cycle': None, 'history': [], 'lesson_progress': [],
         })
         data = self.projection(self.create(), 201)
         cycle = data['planned_cycle']

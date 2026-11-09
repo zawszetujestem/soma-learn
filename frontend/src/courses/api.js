@@ -17,6 +17,10 @@ const conflictMessages = {
   course_not_approved: 'Kurs nie został zatwierdzony.',
   course_not_rejected: 'Kurs nie został odrzucony.',
   course_not_private: 'Kurs nie jest prywatny.',
+  stale_lesson_progress: 'Postęp lekcji zmienił się. Sprawdź odświeżoną tablicę.',
+  invalid_lesson_transition: 'Ta zmiana statusu lekcji nie jest dozwolona.',
+  lesson_in_progress_exists: 'Inna lekcja jest już w trakcie. Najpierw przekaż ją do sprawdzenia.',
+  lesson_cycle_not_active: 'Ten cykl lekcji nie jest już aktywny.',
 }
 
 export function courseErrorMessage(status, payload = {}) {
@@ -133,6 +137,9 @@ export const coursesApi = {
   startCycle: (id) => post(`/api/instances/${id}/cycles/`),
   closeCycle: (id, cycleId) => post(`/api/instances/${id}/cycles/${cycleId}/close/`),
   getLessonCycles: (id) => get(`/api/instances/${id}/lesson-cycles/`),
+  updateLessonProgress: (id, cycleId, lessonId, changes) => patch(
+    `/api/instances/${id}/lesson-cycles/${cycleId}/lessons/${lessonId}/progress/`, changes,
+  ),
   createLessonCycle: (id, dates) => post(`/api/instances/${id}/lesson-cycles/`, dates),
   updateLessonCycle: (id, cycleId, dates) => patch(`/api/instances/${id}/lesson-cycles/${cycleId}/`, dates),
   startLessonCycle: (id, cycleId) => post(`/api/instances/${id}/lesson-cycles/${cycleId}/start/`),

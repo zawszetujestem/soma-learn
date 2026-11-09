@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, postJson, responseError } from './authApi.js'
+import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, logout, postJson, responseError } from './authApi.js'
 import { clearToken } from './courses/api.js'
 
 function AuthLayout({ title, children }) {
@@ -351,16 +351,34 @@ export function LoginPage() {
       if (stage === 'exchange') {
         await finish()
       } else if (stage === 'password') {
-        const { response, payload } = await postJson('/_allauth/browser/v1/auth/login', {
+        const credentials = {
           email: form.get('email'), password: form.get('password'),
-        })
+        }
+        let loginResult = await postJson('/_allauth/browser/v1/auth/login', credentials)
+        if (loginResult.response.status === 409) {
+          const { response: sessionResponse, payload: sessionPayload } = await getJson('/_allauth/browser/v1/auth/session')
+          if (![200, 401].includes(sessionResponse.status)) {
+            setError(responseError(sessionResponse, sessionPayload))
+            return
+          }
+          if (sessionResponse.status === 200 && sessionPayload.meta?.is_authenticated === true) {
+            try {
+              await logout()
+            } catch (failure) {
+              setError(failure.message === 'Failed to fetch'
+                ? connectionError
+                : failure.message || 'Nie udało się potwierdzić wylogowania. Spróbuj ponownie.')
+              return
+            }
+            loginResult = await postJson('/_allauth/browser/v1/auth/login', credentials)
+          }
+        }
+        const { response, payload } = loginResult
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
         } else if (response.status === 200 && payload.meta?.is_authenticated === true && !payload.errors?.length) {
           // Trusted browser: the backend skipped OTP after a correct password.
-          await finish()
-        } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
           await finish()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
@@ -434,7 +452,7 @@ export function LoginPage() {
             <label htmlFor="remember-browser">Zapamiętaj mnie w tej przeglądarce</label>
           </div>
           <p className="login-notice trust-help" id="remember-browser-help">
-            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki. Wylogowanie cofa to zaufanie.
+            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki. Wylogowanie kończy sesję, ale nie usuwa zaufania.
           </p>
           <button className="button button-primary" type="submit" disabled={busy || !remaining}>{busy ? 'Weryfikowanie…' : 'Potwierdź kod'}</button>
           <button className="button button-secondary" type="button" onClick={resend} disabled={busy || resendLocked || !remaining || cooldown > 0}>

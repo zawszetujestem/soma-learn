@@ -113,6 +113,7 @@ class RegistrationContractTests(EmailConfirmationMixin, TestCase):
         with self.subTest(check='validation_error'):
             self.assertEqual(response.status_code, 400)
             self.assertIn('email', response.data)
+            self.assertTrue(response.data.get('message'))
         with self.subTest(check='no_duplicate_user'):
             self.assertEqual(User.objects.count(), users_before)
             self.assertEqual(
@@ -137,6 +138,7 @@ class RegistrationContractTests(EmailConfirmationMixin, TestCase):
         response = self.register(email='mentor@example.com', role='mentor')
 
         self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.data.get('message'))
         self.assertFalse(User.objects.filter(email='mentor@example.com').exists())
         self.assertEqual(mail.outbox, [])
 
@@ -162,6 +164,7 @@ class RegistrationContractTests(EmailConfirmationMixin, TestCase):
         response = self.register(password='password')
 
         self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.data.get('message'))
         self.assertIn('password', response.data)
         self.assertFalse(User.objects.filter(email='new.student@example.com').exists())
         self.assertEqual(mail.outbox, [])

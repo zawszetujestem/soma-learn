@@ -290,7 +290,7 @@ describe('SOMA Learn public pages', () => {
 
   it.each([
     ['duplicate email', 400, { email: ['user with this email address already exists.'] }, /e-?mail.*(istnieje|zajęty|używany)|konto.*istnieje/i],
-    ['weak password', 400, { password: ['This password is too common.'] }, /hasło/i],
+    ['weak password', 400, { password: ['This password is too common.'] }, /hasło jest zbyt popularne/i],
     ['server error', 500, { detail: 'Server error.' }, /błąd.*serwera|spróbuj ponownie/i],
   ])('shows a useful registration message for %s', async (_caseName, status, body, message) => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(body, status))
@@ -302,6 +302,9 @@ describe('SOMA Learn public pages', () => {
     await user.click(registrationSubmitButton())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    if (_caseName === 'weak password') {
+      expect(screen.getByRole('alert')).not.toHaveTextContent('This password is too common.')
+    }
     expectSecurePost(fetchMock, 0)
     expect(screen.queryByText(/sprawdź.*e-?mail/i)).not.toBeInTheDocument()
     expect(sessionStorage.length).toBe(0)
@@ -318,6 +321,26 @@ describe('SOMA Learn public pages', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/połączen|sieci|spróbuj ponownie/i)
     expectSecurePost(fetchMock, 0)
+  })
+
+  it.each([
+    [403, {}, /odśwież stronę|ponownie/i],
+    [429, {}, /zbyt wiele prób|odczekaj/i],
+  ])('shows a safe login message for HTTP %s', async (status, body, message) => {
+    const fetchMock = vi.fn().mockResolvedValue(headlessResponse({
+      status,
+      errors: body.errors,
+      meta: { is_authenticated: false },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    renderAt('/logowanie')
+
+    await submitLogin(user)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(calledUrls(fetchMock)).toEqual([LOGIN_URL])
+    expect(sessionStorage.length).toBe(0)
   })
 
   it('does not verify an email on GET of the confirmation route until the explicit button is clicked', () => {

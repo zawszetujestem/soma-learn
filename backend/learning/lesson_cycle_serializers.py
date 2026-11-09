@@ -3,7 +3,7 @@ import re
 
 from rest_framework import serializers
 
-from .models import InstanceLessonCycle
+from .models import InstanceLessonCycle, InstanceLessonProgress
 
 
 class LocalDateField(serializers.DateField):
@@ -41,6 +41,18 @@ class LessonCycleLessonSerializer(serializers.Serializer):
     lesson_id = serializers.IntegerField(min_value=1)
 
 
+class LessonProgressUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=InstanceLessonProgress.Status.choices)
+    expected_status = serializers.ChoiceField(choices=InstanceLessonProgress.Status.choices)
+    expected_revision = serializers.IntegerField(min_value=0)
+
+
+class LessonProgressSerializer(serializers.Serializer):
+    lesson_id = serializers.IntegerField()
+    status = serializers.ChoiceField(choices=InstanceLessonProgress.Status.choices)
+    revision = serializers.IntegerField(min_value=0)
+
+
 class LessonCycleSerializer(serializers.ModelSerializer):
     last_day = serializers.SerializerMethodField()
     lesson_ids = serializers.SerializerMethodField()
@@ -60,3 +72,4 @@ class LessonCycleProjectionSerializer(serializers.Serializer):
     active_cycle = LessonCycleSerializer(allow_null=True)
     planned_cycle = LessonCycleSerializer(allow_null=True)
     history = LessonCycleSerializer(many=True)
+    lesson_progress = LessonProgressSerializer(many=True)

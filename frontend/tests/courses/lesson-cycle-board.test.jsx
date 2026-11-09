@@ -18,7 +18,7 @@ describe('cykle lekcji', () => {
   it('mapuje tylko lekcje, zachowuje kolejność drzewa i grupuje backlog w działy/tematy', async () => {
     setup({ ...BOTH, active_cycle: cycle(5, [3, 9], { status: 'active' }), planned_cycle: cycle(6) })
     await screen.findByText('Lekcja Z')
-    expect(within(region('Aktywny cykl')).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Lekcja Z', 'Lekcja A'])
+    expect(within(region('Aktywny cykl')).getAllByRole('listitem').map(li => li.getAttribute('aria-label'))).toEqual(['Lekcja Z', 'Lekcja A'])
     const backlog = within(region('Pozostałe lekcje'))
     expect(backlog.getAllByRole('heading').map(h => h.textContent)).toEqual(['Pozostałe lekcje', 'Dział B', 'Temat A', 'Dział A', 'Temat B'])
     expect(backlog.queryByText('Lekcja Z')).toBeNull()

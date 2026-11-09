@@ -2,16 +2,27 @@ from django.db import transaction
 
 from . import services
 from .lesson_cycle_serializers import LessonCycleProjectionSerializer, validate_date_range
-from .models import CourseNode, Instance, InstanceLessonCycle, InstanceLessonCycleLesson
+from .models import (
+    CourseNode, Instance, InstanceLessonCycle, InstanceLessonCycleLesson, InstanceLessonProgress,
+)
 
 
 def projection(instance):
     data = {'active_cycle': None, 'planned_cycle': None, 'history': []}
+    progress = {
+        row.lesson_id: {'lesson_id': row.lesson_id, 'status': row.status, 'revision': row.revision}
+        for row in instance.lesson_progress.all()
+    }
     for cycle in instance.lesson_cycles.prefetch_related('entries'):
+        for entry in cycle.entries.all():
+            progress.setdefault(entry.lesson_id, {
+                'lesson_id': entry.lesson_id, 'status': InstanceLessonProgress.Status.TODO, 'revision': 0,
+            })
         if cycle.status == InstanceLessonCycle.Status.ENDED:
             data['history'].append(cycle)
         else:
             data[f'{cycle.status}_cycle'] = cycle
+    data['lesson_progress'] = [progress[lesson_id] for lesson_id in sorted(progress)]
     return LessonCycleProjectionSerializer(data).data
 
 
@@ -114,4 +125,52 @@ def remove_lesson(user, instance_id, cycle_id, lesson_id):
     if entry is None:
         raise services.not_found()
     entry.delete()
+    return projection(instance)
+
+
+LESSON_TRANSITIONS = {
+    'todo': {'in_progress'},
+    'revision': {'in_progress'},
+    'in_progress': {'review'},
+    'review': {'revision', 'done'},
+    'done': set(),
+}
+
+
+@transaction.atomic
+def update_progress(user, instance_id, cycle_id, lesson_id, *,
+                    status, expected_status, expected_revision):
+    # The same parent lock protects cycle lifecycle, instance close/resume and
+    # progress, including the absent-row case and the global in-progress slot.
+    instance = lock_writable_instance(user, instance_id)
+    cycle = get_cycle(instance, cycle_id)
+    if cycle.status != InstanceLessonCycle.Status.ACTIVE:
+        raise services.conflict('lesson_cycle_not_active', 'Cykl nie jest aktywny.')
+    if not cycle.entries.filter(
+        lesson_id=lesson_id, lesson__version_id=instance.course_version_id, lesson__kind='lesson',
+    ).exists():
+        raise services.not_found()
+    progress = instance.lesson_progress.filter(lesson_id=lesson_id).first()
+    current_status = progress.status if progress else InstanceLessonProgress.Status.TODO
+    current_revision = progress.revision if progress else 0
+    if (expected_status, expected_revision) != (current_status, current_revision):
+        raise services.conflict(
+            'stale_lesson_progress', 'Postęp lekcji uległ zmianie. Odśwież dane i spróbuj ponownie.',
+        )
+    if status not in LESSON_TRANSITIONS[current_status]:
+        raise services.conflict('invalid_lesson_transition', 'Niedozwolona zmiana statusu lekcji.')
+    if status == InstanceLessonProgress.Status.IN_PROGRESS and instance.lesson_progress.filter(
+        status=InstanceLessonProgress.Status.IN_PROGRESS,
+    ).exists():
+        raise services.conflict(
+            'lesson_in_progress_exists', 'Inna lekcja w tej instancji jest już w trakcie.',
+        )
+    if progress is None:
+        InstanceLessonProgress.objects.create(
+            instance=instance, lesson_id=lesson_id, status=status, revision=1,
+        )
+    else:
+        progress.status = status
+        progress.revision += 1
+        progress.save(update_fields=['status', 'revision'])
     return projection(instance)

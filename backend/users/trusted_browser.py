@@ -69,10 +69,3 @@ def issue(request, response, user):
         httponly=True,
         samesite='Lax',
     )
-
-
-def revoke(request, response):
-    raw = _raw_token(request)
-    if raw:
-        TrustedBrowser.objects.filter(token_hash=_hash_token(raw)).delete()
-    response.delete_cookie(COOKIE_NAME, path='/', samesite='Lax')

@@ -339,6 +339,27 @@ class TrustedBrowserLoginContractTests(TrustedBrowserMixin, TestCase):
 
 
 class TrustedBrowserLogoutContractTests(TrustedBrowserMixin, TestCase):
+    def test_login_conflict_recovery_preserves_trust_and_skips_code(self):
+        client = self.remembered_client()
+        raw = client.cookies[COOKIE].value
+        sent_before = len(mail.outbox)
+
+        conflict = self.start_login(client, self.user.email)
+        self.assertEqual(conflict.status_code, 409)
+        self.assertTrue(self.session(client)['meta']['is_authenticated'])
+        self.logout(client)
+        self.assertFalse(self.session(client)['meta']['is_authenticated'])
+
+        trusted = trusted_browser_model().objects.get(user=self.user)
+        self.assertEqual(client.cookies[COOKIE].value, raw)
+        self.assertTrue(client.cookies[COOKIE]['httponly'])
+        self.assertGreater(trusted.expires_at, timezone.now())
+
+        retried = self.start_login(client, self.user.email)
+        self.assertEqual(retried.status_code, 200, retried.content)
+        self.assertTrue(retried.json()['meta']['is_authenticated'])
+        self.assertEqual(len(mail.outbox), sent_before)
+
     def test_logout_preserves_trust_and_allows_password_login_without_code(self):
         profile_a = self.remembered_client()
         profile_b = self.remembered_client()

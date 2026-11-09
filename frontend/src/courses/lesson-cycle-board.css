@@ -43,7 +43,58 @@
   outline: 3px solid var(--accent, #4f46e5);
   outline-offset: 3px;
 }
+.lesson-progress-board, .lesson-progress-columns, .lesson-progress-summaries {
+  display: grid;
+  gap: .75rem;
+  min-width: 0;
+}
+.lesson-progress-summaries {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.lesson-progress-columns {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+}
+.lesson-progress-column {
+  min-width: 0;
+  padding: .5rem;
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: .5rem;
+}
+.lesson-progress-board :is(h4, h5, p, span) { overflow-wrap: anywhere; }
+.lesson-progress-cards {
+  display: grid;
+  gap: .75rem;
+  list-style: none;
+  padding: 0;
+}
+.lesson-progress-card {
+  display: grid;
+  gap: .75rem;
+  min-width: 0;
+  padding: .5rem;
+  border: 1px solid var(--border, #d6d6d6);
+  border-radius: .5rem;
+}
+.lesson-progress-title { font-weight: 600; }
+.lesson-progress-card[draggable="true"] { cursor: grab; }
+.lesson-progress-card label { min-width: 0; }
+.lesson-progress-card select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  font: inherit;
+}
+.lesson-progress-board :is(select, li[tabindex]):focus-visible {
+  outline: 3px solid var(--accent, #4f46e5);
+  outline-offset: 3px;
+}
+@media (max-width: 1100px) {
+  .lesson-progress-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 480px) {
+  .lesson-progress-columns { grid-template-columns: minmax(0, 1fr); }
   .lesson-cycle-dates label, .lesson-cycle-dates > button, .lesson-cycle-list .button { width: 100%; }
   .lesson-cycle-topic { padding-inline-start: 0; }
 }

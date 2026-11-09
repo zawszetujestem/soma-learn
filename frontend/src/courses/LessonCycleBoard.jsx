@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { coursesApi } from './api.js'
 import { useLoader } from './RequireAuth.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
+import LessonProgressBoard from './LessonProgressBoard.jsx'
 import './lesson-cycle-board.css'
 
 // Calendar dates, never UTC timestamps. Noon avoids DST midnight discontinuities.
@@ -130,7 +131,9 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
   const state = useLoader(() => coursesApi.getLessonCycles(instanceId), [instanceId, refreshKey])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [announcement, setAnnouncement] = useState('')
   const inFlight = useRef(false)
+  const [refreshError, setRefreshError] = useState(null)
   const buttonRefs = useRef({})
   const planHeadingRef = useRef(null)
   const activeHeadingRef = useRef(null)
@@ -143,18 +146,45 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
     const focusTarget = action || heading
     focusTarget?.focus()
   }, [focusRequest])
-  const movable = canEdit && !busy && !instanceBusy && state.status === 'ready'
+  const movable = canEdit && !busy && !instanceBusy && !refreshError && state.status === 'ready'
 
-  async function mutate(operation, lessonId, target = 'plan') {
+  async function refreshProjection() {
+    if (inFlight.current) return
+    inFlight.current = true
+    setBusy(true)
+    try {
+      state.setData(await coursesApi.getLessonCycles(instanceId))
+      setRefreshError(null)
+    } catch (failure) {
+      setRefreshError(failure)
+    } finally {
+      inFlight.current = false
+      setBusy(false)
+      setFocusRequest({ target: 'active' })
+    }
+  }
+
+  async function mutate(operation, lessonId, target = 'plan', refreshOnConflict = false) {
     if (!movable || inFlight.current) return
     inFlight.current = true
     setBusy(true)
     setError(null)
+    setAnnouncement('')
     try {
       // Each mutation returns the authoritative projection, including the surviving plan.
       state.setData(await operation())
+      if (refreshOnConflict) setAnnouncement('Zapisano status lekcji.')
     } catch (failure) {
       setError(failure.message)
+      if (refreshOnConflict && failure.status === 409) {
+        // Never replay a rejected transition against a new revision.
+        try {
+          state.setData(await coursesApi.getLessonCycles(instanceId))
+          setRefreshError(null)
+        } catch (refreshFailure) {
+          setRefreshError(refreshFailure)
+        }
+      }
     } finally {
       inFlight.current = false
       setBusy(false)
@@ -199,13 +229,23 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
       <h2>Cykle lekcji</h2>
       <p className="instance-note">Cykl rozpoczynasz i kończysz ręcznie. Daty nie uruchamiają ani nie zamykają cyklu.</p>
       {error && <ErrorMessage>{error}</ErrorMessage>}
-      <p role="status" aria-live="polite" className={busy ? 'courses-status' : 'sr-only'}>{busy ? 'Zapisywanie cyklu lekcji…' : ''}</p>
+      {refreshError && <ErrorMessage onRetry={refreshProjection}>
+        Nie udało się odświeżyć tablicy. Zmiany są zablokowane do odświeżenia. {refreshError.message}
+      </ErrorMessage>}
+      <p role="status" aria-live="polite" className={busy || announcement ? 'courses-status' : 'sr-only'}>
+        {busy ? 'Zapisywanie cyklu lekcji…' : announcement}
+      </p>
 
       <section className="lesson-cycle-zone" aria-label="Aktywny cykl">
         <h3 ref={activeHeadingRef} tabIndex={-1}>Aktywny cykl</h3>
         {active ? <>
           <p>{displayCycleDates(active)}</p>
-          {activeEntries.length ? <LessonList entries={activeEntries} /> : <EmptyMessage>Cykl nie zawiera lekcji.</EmptyMessage>}
+          {activeEntries.length ? <LessonProgressBoard entries={activeEntries} projection={state.data}
+            canEdit={canEdit} movable={movable} buttonRefs={buttonRefs}
+            onMove={(lessonId, status, previous) => mutate(() => coursesApi.updateLessonProgress(
+              instanceId, active.id, lessonId,
+              { status, expected_status: previous.status, expected_revision: previous.revision },
+            ), lessonId, 'active', true)} /> : <EmptyMessage>Cykl nie zawiera lekcji.</EmptyMessage>}
           {canEdit && <button type="button" className="button button-secondary" disabled={!movable}
             onClick={() => mutate(() => coursesApi.closeLessonCycle(instanceId, active.id), undefined, 'active')}>Zakończ cykl lekcji</button>}
         </> : <EmptyMessage>Brak aktywnego cyklu.</EmptyMessage>}

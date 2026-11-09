@@ -371,7 +371,7 @@ describe('logout reliability', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/nie udało się potwierdzić wylogowania/i)
     expect(alert).toHaveTextContent(/sesja może nadal być aktywna/i)
-    expect(alert).toHaveTextContent(/przeglądarka była zapamiętana.*zachowa zaufanie/i)
+    expect(alert).toHaveTextContent(/jeśli przeglądarka była zapamiętana.*zachowa zaufanie/i)
     expect(sessionStorage.getItem('token')).toBeNull()
     expect(screen.getByRole('link', { name: 'Zaloguj się' })).toBeInTheDocument()
 

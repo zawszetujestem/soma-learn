@@ -39,7 +39,14 @@ class RegisterView(generics.CreateAPIView):
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    **serializer.errors,
+                    'message': 'Sprawdź dane formularza i popraw wskazane pola.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         self.perform_create(serializer)
         data = dict(UserSerializer(serializer.instance).data)
         data.pop('age', None)
@@ -82,12 +89,7 @@ class RememberBrowserConfirmLoginCodeView(ConfirmLoginCodeView):
 
 
 class TrustedBrowserSessionView(SessionView):
-    """allauth session; logout also revokes this profile's trusted-browser token."""
-
-    def delete(self, request, *args, **kwargs):
-        response = super().delete(request, *args, **kwargs)
-        trusted_browser.revoke(request, response)
-        return response
+    """allauth session; ending it does not revoke the profile's 24h browser trust."""
 
 
 class TokenExchangeView(APIView):

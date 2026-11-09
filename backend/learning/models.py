@@ -231,6 +231,37 @@ class InstanceLessonCycleLesson(models.Model):
         ]
 
 
+class InstanceLessonProgress(models.Model):
+    """Durable lesson state, independent of cycle selection."""
+
+    class Status(models.TextChoices):
+        TODO = 'todo', 'Do zrobienia'
+        REVISION = 'revision', 'Do poprawy'
+        IN_PROGRESS = 'in_progress', 'W trakcie'
+        REVIEW = 'review', 'Do sprawdzenia'
+        DONE = 'done', 'Zrobione'
+
+    instance = models.ForeignKey(Instance, on_delete=models.CASCADE, related_name='lesson_progress')
+    lesson = models.ForeignKey('CourseNode', on_delete=models.PROTECT, related_name='instance_progress')
+    status = models.CharField(max_length=12, choices=Status.choices)
+    revision = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['lesson_id']
+        constraints = [
+            models.UniqueConstraint(fields=['instance', 'lesson'], name='one_instance_lesson_progress'),
+            models.UniqueConstraint(
+                fields=['instance'], condition=Q(status='in_progress'),
+                name='one_in_progress_lesson_per_instance',
+            ),
+            models.CheckConstraint(
+                condition=Q(status__in=['todo', 'revision', 'in_progress', 'review', 'done']),
+                name='lesson_progress_status_valid',
+            ),
+            models.CheckConstraint(condition=Q(revision__gte=1), name='lesson_progress_revision_positive'),
+        ]
+
+
 class Classification(models.Model):
     name = models.CharField(max_length=200)
     is_active = models.BooleanField(default=True)

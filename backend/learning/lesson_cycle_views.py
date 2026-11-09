@@ -1,3 +1,4 @@
+from drf_spectacular.openapi import AutoSchema
 from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -6,7 +7,7 @@ from rest_framework.views import APIView
 from . import lesson_cycle_services as cycles, services
 from .lesson_cycle_serializers import (
     LessonCycleCreateSerializer, LessonCycleLessonSerializer, LessonCycleProjectionSerializer,
-    LessonCycleUpdateSerializer,
+    LessonCycleUpdateSerializer, LessonProgressUpdateSerializer,
 )
 from .views import AUTHENTICATION_CLASSES
 
@@ -66,3 +67,24 @@ class LessonCycleLessonDetailView(LessonCycleView):
     @extend_schema(request=None, responses=LessonCycleProjectionSerializer)
     def delete(self, request, pk, cycle_id, lesson_id):
         return Response(cycles.remove_lesson(request.user, pk, cycle_id, lesson_id))
+
+
+class LessonProgressSchema(AutoSchema):
+    def _get_request_for_media_type(self, serializer, direction='request'):
+        # Unlike a partial model PATCH, this command requires both preconditions.
+        # Do not let spectacular's PATCH shortcut strip required serializer fields.
+        component = self.resolve_serializer(serializer, direction)
+        return component.ref, True
+
+
+class LessonProgressView(LessonCycleView):
+    schema = LessonProgressSchema()
+
+    @extend_schema(request=LessonProgressUpdateSerializer, responses=LessonCycleProjectionSerializer)
+    def patch(self, request, pk, cycle_id, lesson_id):
+        self.readable_instance(request, pk)
+        serializer = LessonProgressUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(cycles.update_progress(
+            request.user, pk, cycle_id, lesson_id, **serializer.validated_data,
+        ))
