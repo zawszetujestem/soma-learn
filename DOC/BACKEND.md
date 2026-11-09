@@ -128,18 +128,16 @@ Token przekazuje się jako `Authorization: Token <token>`. Frontend przechowuje 
 - Konto musi być aktywne i mieć potwierdzony email. Funkcja jest dostępna dla wszystkich ról, także admin, staff i superuser, bez dodatkowych ograniczeń dla kont uprzywilejowanych.
 - Reset hasła Headless i legacy oraz każda inna zmiana zapisanego hasha hasła unieważniają zaufania wszystkich profili przez niezgodność fingerprintu. Rekordy nie są wtedy od razu fizycznie kasowane. Zmiana `SECRET_KEY` również unieważnia zaufania.
 - Cookie jest poświadczeniem typu bearer, nie dowodem posiadania konkretnego urządzenia: skopiowane przed unieważnieniem może służyć do pominięcia OTP w innym profilu, ale nadal wymaga poprawnego hasła. Nie należy włączać opcji na współdzielonym urządzeniu/profilu.
-- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po wylogowaniu lub utracie/wygaśnięciu sesji, jeśli nadal trwa pierwotny TTL i fingerprint hasła jest zgodny. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
+- Nie zmieniono czasu sesji Django (domyślnie 14 dni) ani cyklu życia tokenów DRF. Zaufanie nie utrzymuje sesji; może być wykorzystane przy kolejnym logowaniu po utracie/wygaśnięciu sesji, o ile nie wykonano wylogowania i nadal trwa TTL. Samo cookie nie pozwala wymienić tokenu bez uwierzytelnionej sesji.
 - Google i formularz `/admin/` pozostają bez zmian; formularz Django admin już wcześniej nie wymagał OTP. Nie jest to wdrożenie pełnego MFA ani pełny audyt bezpieczeństwa.
 
 #### Wylogowanie (allauth Headless)
 
-`DELETE /_allauth/browser/v1/auth/session` kończy sesję, ale nie usuwa ani nie rotuje cookie `soma_trusted_browser` lub odpowiadającego mu rekordu serwerowego. Zaufanie przetrwa potwierdzone wylogowanie oraz wylogowanie z wygasłą sesją, bez przedłużenia pierwotnych 24 godzin. Do końca tego okresu ten sam profil nadal wymaga poprawnego hasła, a pomija wyłącznie OTP; wygaśnięcie zaufania lub zmiana hasła ponownie wymuszają OTP. Żądania przeglądarkowe nadal wymagają CSRF.
+`DELETE /_allauth/browser/v1/auth/session` kończy sesję i usuwa cookie `soma_trusted_browser` oraz odpowiadający mu rekord serwerowy, także gdy sesja już wygasła. Replay cofniętego cookie nie pomija OTP; inne profile zachowują zaufanie. Żądania przeglądarkowe nadal wymagają CSRF.
 
-Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że sesja serwerowa może nadal być aktywna, i udostępnia „Ponów wylogowanie”. Retry służy zakończeniu sesji, nie cofnięciu zaufania. Samo usunięcie tokenu z karty nie potwierdza zakończenia sesji po stronie serwera.
+Frontend uznaje wylogowanie za potwierdzone przy `200` lub `401` z `meta.is_authenticated: false`. Lokalny token DRF z `sessionStorage` usuwa także przy błędzie, ale wtedy ostrzega, że serwer mógł nie zakończyć sesji/cofnąć zaufania, i udostępnia „Ponów wylogowanie”. Samo usunięcie tokenu z karty nie potwierdza unieważnienia po stronie serwera.
 
-**Istniejące ryzyko poza zakresem:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; zaufanie przeglądarki jest odrębnym mechanizmem.
-
-Obsługa konfliktu logowania `409`, lokalnych pól formularza i ograniczeń natywnego autofill: [frontend/README.md](../frontend/README.md#zaufana-przeglądarka-i-wylogowanie). Nie zmieniono logowania Google.
+**Istniejące ryzyko:** wydany token DRF pozostaje ważny po wylogowaniu i resecie hasła. Ta funkcja go nie unieważnia; cofnięcie zaufania przeglądarki nie rozwiązuje tego problemu.
 
 #### Zablokowane endpointy Headless
 
@@ -275,8 +273,7 @@ Nowy model treści kursów jest wersjonowany. Backend API, walidacja publikacji 
 - Zawartość ma hierarchię **Dział → Temat → Lekcja** (`CourseNode`). Lekcje mogą zawierać osobne materiały teorii i praktyki (`LessonItem`): teoria obsługuje Markdown, PDF, obraz lub wideo; praktyka — tekst, tekst z obrazem, PDF lub obraz. Odpowiedź wzorcowa może być kluczem wyłącznie dla materiału praktycznego.
 - Test (`NodeTest`) może być przypisany do elementu hierarchii i zawiera pytania jednokrotnego albo wielokrotnego wyboru, odpowiedzi i oznaczenia poprawności. W v1 nie ma rozwiązywania testu ani oceniania.
 - Wymaganie wstępne (`NodePrerequisite`) wskazuje wcześniejszy, niezależny element tej samej wersji z testem i próg 1–100%. Jest walidowane strukturalnie, ale w v1 ma charakter informacyjny: system nie blokuje dostępu ani nie sprawdza jego spełnienia.
-- `CourseTask` i plan godzinowy pozostają niezależne od wersjonowanej treści.
-- `CourseTask.prerequisite_ids` opisuje zależności wyłącznie w obrębie planu jednego kursu. Zależności nie mogą wskazywać samego zadania ani tworzyć cyklu. To egzekwowane wymagania planu; odrębne `NodePrerequisite` w treści kursu pozostają informacyjne.
+- `CourseTask` i plan godzinowy pozostają niezależne od wersjonowanej treści. Zadania planu są nadal kopiowane do instancji przy dołączeniu; ich zmiany nie zmieniają treści przypiętej do istniejącej instancji.
 - `Course.approval_status`, `Course.title` i `Course.description` pozostają w bazie jako pola archiwalne/backward compatibility. Nie są źródłem bieżącego lifecycle ani treści publikacji; właściwym stanem jest wersja, a aktualny tytuł i opis pochodzą z niej.
 
 ### Lifecycle, moderacja i role
@@ -285,139 +282,35 @@ Nowa wersja kursu powstaje jako szkic (`draft`). Edytować można `draft` i `rej
 
 | Operacja | Dozwolony wykonawca i warunek | Wynik |
 |---|---|---|
-| `submit` | Właściciel-mentor kursu publicznego, którego właściciel nie ma roli `admin`; przed pierwszą publikacją; stan `draft` lub `rejected` | `submitted`; pełna walidacja publikacji |
-| `withdraw` | Właściciel mentor/admin z prawem mutacji; wersja `submitted` | `draft` |
-| `publish` | Właściciel mentor/admin kursu prywatnego; admin-właściciel publicznego; dowolny admin dla publicznego z historyczną publikacją; stan `draft` lub `rejected` | `published`, wskazanie jako bieżącej publikacji |
-| `accept` | Rola `admin`; zgłoszona wersja publiczna, której właściciel nie ma roli `admin` | `published` po walidacji |
-| `reject` | Rola `admin`; wersja `submitted` | `rejected`, z opcjonalnym uzasadnieniem |
+| `submit` | Właściciel będący mentorem; kurs publiczny; stan `draft` lub `rejected` | `submitted`; pełna walidacja publikacji |
+| `withdraw` | Właściciel mentora/admin; wersja `submitted` | `draft` |
+| `publish` | Właściciel mentora/admin dla kursu prywatnego; administrator-właściciel kursu publicznego; stan `draft` lub `rejected` | `published`, wskazanie jako bieżącej publikacji |
+| `accept` | Administrator inny niż właściciel; zgłoszona wersja kursu publicznego | `published` po walidacji |
+| `reject` | Administrator; wersja `submitted` | `rejected`, z opcjonalnym uzasadnieniem |
 
-Tworzenie nadal wymaga roli mentor lub admin. Administrator tworzy wyłącznie kursy publiczne; konto łączące role mentora i administratora podlega regułom administratora. Uprawnienia aplikacyjne wynikają z roli `admin`, nie z samego `is_staff`/`is_superuser`. Kurs prywatny może opublikować jego właściciel.
-
-Mentor-autor zarządza publicznym kursem do pierwszej opublikowanej wersji: może edytować, zgłaszać i ponownie zgłosić wersję `rejected`. Od pierwszej publikacji traci wszystkie mutacje kursu publicznego (tożsamość/aktywność, DELETE, plan, wersje, treść, zasoby i lifecycle), ale zachowuje autorstwo i odczyt. Decyduje istnienie dowolnej wersji `published`, także historycznej — dezaktywacja kursu lub brak bieżącego wskaźnika publikacji nie przywracają prawa zapisu. `Course.owner` i mentor przypisany do instancji nie są zmieniani; uprawnienia obsługi instancji pozostają niezależne.
-
-Publicznymi kursami po publikacji zarządza application admin: może skopiować publikację do nowego szkicu, edytować i bezpośrednio publikować kolejne wersje. Cudzej pierwszej wersji nie może opublikować przez `publish`: mentor zgłasza ją, a admin wykonuje `accept`. Administrator przegląda kolejkę przez `GET /api/course-moderation/`, a akceptację/odrzucenie wykonuje przez API albo akcje Django admin na wersjach. Django admin udostępnia link do podglądu SPA; nie edytuje treści przez formularz admina.
+Mentor nie może samodzielnie opublikować kursu publicznego: zgłasza go do moderacji. Administrator przegląda kolejkę przez `GET /api/course-moderation/`, a akceptację/odrzucenie wykonuje przez API albo akcje Django admin na wersjach. Admin udostępnia bezpośredni link do podglądu SPA; nie edytuje treści kursu przez formularz admina. Administrator tworzy wyłącznie kursy publiczne; konto łączące role mentora i administratora podlega regułom administratora. Kurs prywatny może opublikować jego właściciel.
 
 ### Spójność edycji: ETag i `If-Match`
 
-Odpowiedzi pojedynczych wersji i projekcji zawierają nagłówek `ETag` (wartość nieprzezroczysta dla klienta, aktualnie w formie `"v{id}-r{revision}"`); lista wersji go nie wydaje. Każda mutacja istniejącej wersji (metadane, hierarchia, materiały i upload) oraz każda operacja lifecycle wymaga przesłania aktualnej wartości w `If-Match`. Tworzenie nowego szkicu i operacje na archiwum nieużywanych plików nie zmieniają rewizji istniejącej wersji i nie wymagają tego nagłówka. Brak nagłówka zwraca `400 revision_required`; nieaktualny ETag — `409 stale_revision`. Klient powinien zachować ETag z odpowiedzi i nie odtwarzać go samodzielnie.
+Odpowiedzi dotyczące wersji zawierają nagłówek `ETag` (wartość nieprzezroczysta dla klienta, aktualnie w formie `"v{id}-r{revision}"`). Każda mutacja istniejącej wersji (metadane, hierarchia, materiały i upload) oraz każda operacja lifecycle wymaga przesłania aktualnej wartości w `If-Match`. Tworzenie nowego szkicu i operacje na archiwum nieużywanych plików nie zmieniają rewizji i nie wymagają tego nagłówka. Brak nagłówka zwraca `400 revision_required`; nieaktualny ETag — `409 stale_revision`. Klient powinien zachować ETag z odpowiedzi i nie odtwarzać go samodzielnie.
 
 ### Materiały, pliki i uprawnienia
 
 - Dozwolone pliki: PDF do **20 MB** (`20 000 000` bajtów), JPG/PNG/WebP do **5 MB** (`5 000 000` bajtów), maksymalnie **20 załączników na lekcję** i **1 GB na kurs** (`1 000 000 000` bajtów). MB/GB są dziesiętne. Limit kursu dotyczy przechowywanych plików, także nieużywanych aktualnie przez materiał.
 - Backend waliduje sygnaturę i rzeczywistą zawartość pliku; PDF-y są parsowane, a obrazy dekodowane. To nie jest skan antywirusowy ani gwarancja bezpieczeństwa pliku.
 - `CourseAsset` jest w prywatnym storage (`PRIVATE_MEDIA_ROOT`; bez tej zmiennej lokalizacja domyślna to `backend/private_media`); publiczny URL ani ścieżka do pliku nie są zwracane w JSON. Pobieranie odbywa się wyłącznie przez uwierzytelniony endpoint API, po sprawdzeniu powiązania pliku z daną wersją i uprawnień użytkownika. Nie wystawiać tego katalogu jako statycznych mediów.
-- Odczyt authoring (pełne wersje, walidacja, podgląd i zasoby) przysługuje właścicielowi z rolą mentor oraz adminowi. Autor publicznego kursu zachowuje go po publikacji wyłącznie read-only; mutacje przechodzą na admina. Dotychczasowe uprawnienia admina do treści cudzych kursów prywatnych pozostają zachowane — nie oznacza to dostępu do ich `mine`, tożsamości ani planu.
-- `student-preview` zawsze zwraca projekcję bez kluczy odpowiedzi i flag `is_correct`. Treść przypiętej instancji jest dostępna uczniowi/przypisanemu mentorowi oraz użytkownikom z odczytem authoring; użytkownik z uprawnieniami authoring (także mentor-autor po publikacji) otrzymuje klucze, pozostali — projekcję bez kluczy.
-- `python manage.py cleanup_course_assets` ponawia niedokończone usuwanie i usuwa osierocone, nieśledzone pliki starsze niż 24 godziny (próg można zmienić przez `--older-than-hours`). Należy zapewnić okresowe uruchamianie; polecenie nie zastępuje backupu. Fizyczne pliki kursu usuwanego trwale są kasowane po zatwierdzeniu transakcji; błąd storage lub przerwanie procesu wymaga cleanup.
+- Właściciel kursu/admin może zarządzać treścią. Podgląd ucznia zwraca projekcję bez kluczy odpowiedzi i bez flag `is_correct`. Właściciel widzi pełną treść oraz klucze. Uczeń lub mentor przypisanej instancji pobiera treść wersji przypiętej do instancji; klucze są dostępne wyłącznie w widoku właściciela/administratora.
+- `python manage.py cleanup_course_assets` ponawia niedokończone usuwanie i usuwa osierocone, nieśledzone pliki starsze niż 24 godziny (próg można zmienić przez `--older-than-hours`). Zalecane okresowe uruchamianie; polecenie nie zastępuje backupu.
 
 ### Migracja istniejących danych
 
 Migracje `0002_course_versions_schema`–`0004_require_instance_version` dodają model wersji i treści, wykonują backfill oraz sprawdzają kompletność i zgodność przypięcia instancji. `0003_backfill_course_versions` tworzy dla dotychczasowych kursów wersję 1 i przypina do niej istniejące instancje. Mapowanie: `approved → published`, `pending → submitted`, `rejected → rejected`; tytuł i opis są kopiowane z legacy pól kursu. Migracja nie odtwarza dla istniejących danych hierarchii, materiałów ani testów.
 
-Migracja `0006_plan_dependencies_and_cycles` zmienia ograniczenie aktywnej instancji z jednego na ucznia na jedną na parę uczeń/kurs, dodaje zależności zadań planu i instancji oraz tabele cykli i ich wpisów. Istniejącym zadaniom nie dopisuje zależności, a istniejącym instancjom nie tworzy automatycznie cykli. Przed zastosowaniem migracji wykonaj i sprawdź backup bazy, następnie standardowo uruchom `python manage.py migrate` z katalogu `backend/`. Nie cofaj migracji jako metody rollbacku po nowych zapisach; w razie odtwarzania poprzedniego stanu użyj sprawdzonego backupu.
-
-### Cykle lekcji instancji (nowa tablica)
-
-Cykle lekcji są oddzielnym kalendarzowym mechanizmem od dotychczasowych, zadaniowych `InstanceCycle`/`InstanceCycleTask`. `CourseTask`/`InstanceTask`, ich zależności, statusy i endpointy pozostają bez zmian; cykle lekcji nie wybierają ani nie kończą zadań planu. `InstanceLessonCycle` ma status `planned`, `active` albo `ended`, daty oraz wpisy `InstanceLessonCycleLesson` wskazujące lekcje z przypiętej wersji. Nie ma tu statusu ukończenia lekcji ani blokowania przez wymagania.
-
-Uczeń i przypisany mentor mają odczyt i zapis; każdy inny użytkownik (także autor kursu/admin bez przypisania) otrzymuje `404 not_found`. Zamknięta instancja jest read-only (`409 instance_closed` przy mutacji). Zamknięcie/wznowienie instancji nie zmienia statusów cykli lekcji; nie dodano zmian do istniejącego lifecycle instancji.
-
-Baza endpointów: `/api/instances/{id}/lesson-cycles/`.
-
-| Metoda | Ścieżka względem bazy | Body | Sukces |
-|---|---|---|---|
-| GET | pusta | — | `200`, projekcja |
-| POST | pusta | `{start_date, end_date?}` | `201`, utworzenie planned i projekcja |
-| PATCH | `{cycle_id}/` | `{start_date?, end_date?}` | `200`, edycja dat planned i projekcja |
-| POST | `{cycle_id}/start/` | — | `200`, planned → active i projekcja |
-| POST | `{cycle_id}/close/` | — | `200`, active → ended i projekcja |
-| POST | `{cycle_id}/lessons/` | `{lesson_id}` | `200`, dodanie lekcji do planned i projekcja |
-| DELETE | `{cycle_id}/lessons/{lesson_id}/` | — | `200`, usunięcie lekcji z planned i projekcja |
-
-Wszystkie sukcesy mają tę samą projekcję:
-
-```json
-{
-  "active_cycle": null,
-  "planned_cycle": {
-    "id": 12,
-    "status": "planned",
-    "start_date": "2026-11-08",
-    "end_date": "2026-11-15",
-    "last_day": "2026-11-14",
-    "lesson_ids": [51, 52]
-  },
-  "history": []
-}
-```
-
-`active_cycle`/`planned_cycle` to obiekt w powyższym formacie albo `null`; `history` zawiera ended w kolejności malejącego ID. `lesson_ids` są w kolejności dodania i należy mapować je do drzewa `CourseNode` przypiętej `Instance.course_version`, dostępnego przez istniejące `/api/instances/{id}/content/`; API nie ujawnia kluczy odpowiedzi w projekcji cykli.
-
-- Wyłącznie lokalnie przekazane ISO `YYYY-MM-DD`, bez datetime/timezone. `start_date` włącznie, `end_date` wyłącznie; UI wyświetla inclusive `last_day = end_date - 1 dzień`.
-- Przy tworzeniu `start_date` jest obowiązkowe, pominięte `end_date` daje 7 kolejnych dni. Zakres musi mieć `end_date > start_date`; nie ma limitu długości ani wymogu dat przyszłych.
-- PATCH zachowuje pominięte pole, nie przelicza automatycznie 7 dni. Pusty PATCH jest no-op. Walidacja wynikowego zakresu odbywa się pod blokadą instancji.
-- Maksymalnie jeden active i jeden planned na instancję. Start wymaga planned i braku active. Close wymaga active i nie uruchamia planned. Upływ dat nie powoduje przejść i start/close nie przepisują dat.
-- Wybór/usuwanie lekcji oraz edycja dat są dozwolone tylko w planned. Lekcja musi mieć `kind=lesson` i należeć do przypiętej wersji; prerequisites nie są sprawdzane. Historyczne i aktywne wybory pozostają niezmienne.
-- Endpointy wymagają uwierzytelnienia (`401 not_authenticated`). Brak uprawnienia do instancji lub cykl spoza instancji zwraca `404 not_found`; mutacja zamkniętej instancji `409 instance_closed`. Błędy mają niepuste `message` i `code`, zachowują HTTP status i pola kontraktu błędów. Walidacja dat lub body: `400 validation_error`; nieistniejąca lekcja, lekcja spoza przypiętej wersji lub zły kind: `400 invalid_lesson`; brak cyklu/wpisu albo próba usunięcia nieistniejącego wpisu: `404 not_found`; duplikat wyboru: `409 lesson_already_selected`; drugi planned/active: `409 planned_lesson_cycle_exists` / `active_lesson_cycle_exists`; niedozwolony lifecycle: `409 lesson_cycle_not_planned` / `lesson_cycle_not_active`.
-
-Migracja `0007_lesson_cycles` tworzy `InstanceLessonCycle` i `InstanceLessonCycleLesson` bez backfillu i bez zmian tabel zadań. DB constraints dopuszczają najwyżej jeden planned i jeden active na instancję, ograniczają status do dozwolonych wartości, wymagają `end_date > start_date` i unikalności pary cykl/lekcja. Zapis przez serwisy używa wspólnej blokady `Instance` (`select_for_update`) również z istniejącym close/resume. Powiązanie lekcji z wersją/kind jest walidowane w serwisie (nie przez cross-table CHECK); bezpośrednie zapisy ORM/SQL omijające serwis nie powinny być używane.
-
-Zamknięcie instancji nie kończy automatycznie `InstanceLessonCycle`: aktywny cykl pozostaje aktywny, a planowany pozostaje planowany; oba są zachowane i widoczne tylko do odczytu. Wznowienie nie tworzy ani nie uruchamia cyklu. To zachowanie jest niezależne od starego `InstanceCycle`, który zamyka się wraz z instancją.
-
-Do wdrożenia wykonaj backup, a następnie standardowo `python manage.py migrate` w `backend/`. Nie cofaj migracji po nowych zapisach jako metody rollbacku; w razie potrzeby przywróć sprawdzony backup.
-
-### Instancje ucznia, zależności zadań i cykle
-
-Ta sekcja opisuje zadaniowy `InstanceCycle`/`InstanceCycleTask`; nie opisuje kalendarzowego `InstanceLessonCycle` z osobnego API powyżej.
-
-- Uczeń może mieć równocześnie aktywne instancje różnych kursów. Dla tej samej pary uczeń/kurs istnieje najwyżej jedna aktywna instancja: ponowne dołączenie jest idempotentne i zwraca istniejącą instancję (`200`; utworzenie nowej zwraca `201`). Dołączyć można do opublikowanego, aktywnego kursu publicznego albo do prywatnego przez token zaproszenia. Ten przepływ nie realizuje płatności.
-- Instancja zachowuje wersję treści wskazaną przy dołączeniu. Zadania `CourseTask` i ich zależności są niezależnym snapshotem, a statusy zadań instancji zaczynają się jako `todo`; edycja planu lub publikacja innej wersji kursu nie przepisuje istniejącej instancji.
-- Wymagania wstępne zadań planu są spełnione, gdy wszystkie wskazane zadania mają status `done`. Niespełnione zadanie jest `blocked`, jeśli samo nie jest ukończone. Nie można dodać zablokowanego zadania do cyklu ani zmienić jego statusu na `in_progress` lub `done`. Odblokowanie nie dodaje go automatycznie do cyklu.
-- Instancja może mieć jeden ręcznie uruchomiony, aktywny cykl naraz. Cykle są odrębne od `InstancePeriod`; nie narzucają długości ani limitu zadań. W aktywnym cyklu wybrane, niezablokowane zadania są na tablicy, a pozostałe w backlogu. Zmiana ukończonego zadania z powrotem na status niedokończony może zablokować i odłożyć do backlogu jego niedokończone, wybrane zadania zależne, zachowując ich statusy. Ukończone zależne zadania pozostają ukończone.
-- Zamknięcie lub odłożenie wpisu zachowuje jego status w historii cyklu; zamknięcie cyklu zamraża pozostałe wpisy. Zadania niedokończone wracają do backlogu z zachowanym statusem, a ukończone zadania również są widoczne w backlogu po zakończeniu cyklu.
-- Uczeń może wybierać zadania, zmieniać statusy, prowadzić cykle oraz zamykać i wznawiać własną instancję również z przypisanym mentorem. Przypisany mentor zachowuje możliwość obsługi instancji; uprawnienia pozostałych osób nie zostały rozszerzone. Zamknięcie instancji jest możliwe niezależnie od postępu i zamyka jej aktywny cykl, zapisując historię. Wznowienie przywraca tę samą instancję i jej snapshot, rozpoczyna nowy `InstancePeriod`, lecz nie uruchamia automatycznie cyklu. Wznowienie koliduje tylko z inną aktywną instancją tego samego ucznia w tym samym kursie.
-
-#### API instancji i planu
-
-Poniższe ścieżki mają prefiks `/api/` i wymagają uwierzytelnienia. Instancję może odczytywać uczeń lub przypisany mentor; obcy użytkownik nie otrzymuje dostępu. `GET /instances/mine/` zwraca tablicę instancji, w których bieżący użytkownik jest uczniem, wraz z `course_title` z przypiętej wersji. Odpowiedź instancji zawiera `active_cycle` (obiekt lub `null`), `cycle_history` oraz zadania z `prerequisite_ids` (ID zadań instancji), `blocked` i `selected`.
-
-| Metoda | Ścieżka | Opis i odpowiedź |
-|---|---|---|
-| POST | `/courses/{course_id}/tasks/` | Utworzenie `CourseTask`; opcjonalne `prerequisite_ids` zapisuje zależności |
-| PATCH | `/courses/{course_id}/tasks/{task_id}/` | Zmiana zadania; przesłane `prerequisite_ids` zastępuje listę zależności |
-| GET | `/instances/mine/` | Lista wyłącznie własnych instancji ucznia |
-| POST | `/instances/{id}/cycles/` | Ręczne rozpoczęcie cyklu; zwraca pełną instancję (`201`) |
-| POST | `/instances/{id}/cycles/{cycle_id}/close/` | Zamknięcie aktywnego cyklu; zwraca pełną instancję (`200`) |
-| PATCH | `/instances/{id}/tasks/{task_id}/` | Zmiana `status` i/lub `selected`; zwraca zadanie |
-| POST | `/instances/{id}/close/` | Zamknięcie instancji i aktywnego cyklu; zwraca instancję |
-| POST | `/instances/{id}/resume/` | Wznowienie tej samej instancji bez automatycznego cyklu; zwraca instancję |
-
-Odpowiedzi błędów tej rodziny zachowują status HTTP, domenowy `code` i dostępne `detail`, zawierają bezpieczny, niepusty `message` i nie ujawniają wewnętrznych wyjątków. Przykładowe kody to `invalid_prerequisite` (400), `task_blocked`, `no_active_cycle`, `cycle_already_active`, `cycle_not_active`, `instance_closed` i `slot_taken` (409).
-
-### REST API: kursy i zarządzanie
-
-Prefiks `/api/`; wszystkie endpointy wymagają logowania. Tworzenie i rodzina zarządzania wymagają dodatkowo roli mentor/admin. Odczyt `mine` jest niezależny od prawa zapisu: mentor widzi własne kursy, także publiczne po publikacji i nieaktywne; admin widzi wszystkie publiczne (także nieopublikowane/archiwalne) oraz własne private, nie cudze private. Mutacje tożsamości/planu są dostępne adminowi dla publicznych i własnych private, a mentorowi dla własnych private i publicznych przed pierwszą publikacją.
-
-| Metoda | Ścieżka | Opis i odpowiedź |
-|---|---|---|
-| GET | `/courses/` | `200`, lista `CourseSerializer`: wyłącznie aktywne, opublikowane publiczne |
-| POST | `/courses/` | `201 ManageCourseSerializer`; `visibility`, opcjonalne `title`, `description`, `scope_id`, `subject_id`; tworzy wersję 1 `draft`; admin-private: `403 forbidden` |
-| GET | `/courses/mine/`, `/courses/mine/{id}/` | `200`, lista lub obiekt `ManageCourseSerializer`; autor po publikacji zachowuje odczyt |
-| GET | `/courses/mine/{id}/students-count/` | `200 {"count": N}`; aktywne instancje tego kursu z `mentor=request.user`, nie globalna liczba uczniów |
-| GET | `/courses/{id}/` | `200 CourseSerializer`; wymaga bieżącej publikacji; owner czyta własny kurs także nieaktywny; inni według `visible_courses` (aktywny publiczny lub własna instancja; admin wszystkie opublikowane) |
-| PATCH | `/courses/{id}/` | Wyłącznie `is_active`; `200 ManageCourseSerializer`; widoczność niezmienna, metadane treści przez wersję |
-| DELETE | `/courses/{id}/` | Z dowolnym `Instance` (także `closed`): archiwizacja `is_active=false`, `200 ManageCourseSerializer`; bez instancji: fizyczne usunięcie Course, wersji, treści, planu i rekordów zasobów, `204` bez body |
-| POST | `/courses/{id}/resubmit/` | Zgodnościowe ponowne zgłoszenie `rejected`; aktualny `If-Match`; `200 ManageCourseSerializer` i ETag; dla mentora tylko przed pierwszą publikacją |
-| POST | `/courses/{id}/regenerate-token/` | Kurs prywatny; `200 ManageCourseSerializer`; publiczny: `409 course_not_private` |
-| DELETE | `/courses/{id}/tasks/{task_id}/` | Usunięcie zadania planu; `204`; te same uprawnienia mutacji kursu |
-
-`CourseSerializer` zawiera ID ownera i bieżącej publikacji, widoczność, aktywność, zadania, daty oraz tytuł/opis/klasyfikację i `program` z bieżącej publikacji (bez materiałów/testów). `ManageCourseSerializer` dodaje `working_version`, `versions`, `invite_token` i archiwalne `approval_status`; metadane wybiera z wersji roboczej, a przy jej braku z bieżącej publikacji. Nie zwraca flagi prawa zapisu — frontend ustala je z roli, ownera i historii publikacji.
-
-Archiwizacja zachowuje wersje, zasoby, instancje, przypięcia i historię; nie zmienia mentora instancji ani jej uprawnień. Nowe dołączenia są zabronione (`409 course_inactive` dla uprawnionego ucznia z widocznym kursem), również przed sprawdzeniem idempotentnej aktywnej instancji. DELETE nie wymaga `If-Match`. Archiwizacja nie odbiera uprawnionemu managerowi możliwości reaktywacji przez PATCH.
+Przed migracją wykonaj i sprawdź backup bazy. Odwrócenie schematu po nowych zapisach nie jest bezpiecznym rollbackiem: dane wersji mogą zostać utracone. W razie potrzeby powrotu do poprzedniego stanu odtwórz backup wykonany przed migracją.
 
 ### REST API: wersjonowana treść
 
-Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesję. Trasy treści wymagają zalogowania; odczyt authoring i mutacje rozdzielono zgodnie z sekcją „Materiały, pliki i uprawnienia”. Mentor-autor publicznego kursu po pierwszej publikacji może odczytywać wersje, ale nie zapisywać. `course-moderation` jest dostępne roli `admin`. Odpowiedzi pojedynczych wersji/projekcji i przejść lifecycle zawierają `ETag`; lista wersji nie wydaje ETag.
+Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesję. Trasy treści wymagają zalogowania, a odczyt/edycja wersji i zasobów kursu — uprawnień właściciela-mentora lub administratora. `course-moderation` jest dostępne administratorowi. Odpowiedzi wersji zawierają `ETag`.
 
 | Metoda | Ścieżka | Opis |
 |---|---|---|
@@ -438,55 +331,36 @@ Prefiks `/api/`; uwierzytelnianie przez `Authorization: Token <token>` lub sesj�
 | DELETE | `/courses/{course_id}/assets/{asset_id}/` | Usunięcie nieużywanego pliku |
 | GET | `.../assets/{asset_id}/download/` | Prywatne pobranie załącznika należącego do wersji |
 | GET | `/course-moderation/` | Kolejka zgłoszonych wersji dla administratora |
-| GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; klucze tylko przy uprawnieniach authoring |
+| GET | `/instances/{id}/content/` | Treść wersji przypiętej do instancji; bez kluczy dla ucznia i mentora |
 
-Endpointy dołączania i obsługi instancji są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Nowy klient powinien używać wersjonowanego `.../submit/` zamiast zgodnościowego resubmit opisanego wyżej.
+Podstawowe endpointy kursów, zadań planu i instancji pozostają dostępne pod `/api/courses/` i `/api/instances/` (tworzenie i lista kursów, dołączanie, zadania `CourseTask`, plan godzinowy, status i cykl życia instancji). Są niezależne od numeru wersji; przy dołączeniu instancja zostaje przypięta do aktualnie opublikowanej wersji. Zmiana publikacji nie przepisuje treści już przypiętych instancji. Legacy `POST /api/courses/{id}/resubmit/` pozostaje zgodnościowym endpointem operującym na odrzuconej wersji; nowy klient powinien używać wersjonowanego `.../submit/`.
 
 ### Błędy API
 
-W rodzinach endpointów kursów, instancji, słowników i moderacji odpowiedzi błędów mają bezpieczny, niepusty `message` i `code`; zachowują także właściwy status HTTP oraz dostępne `detail` i dodatkowe pola, np. `issues` lub `dependencies`. Błędy serwera nie ujawniają wewnętrznych wyjątków. Kody statusów: `400 validation_error`, `401 not_authenticated`, `403 forbidden` (lub `csrf_failed`), `404 not_found`, `405 method_not_allowed`, `409 conflict`, `413 request_too_large`, `415 unsupported_media_type`, `429 throttled`, `500 internal_error`, `503 service_unavailable`. Błędy walidacji plików, treści i zależności planu zachowują kod domenowy, np. `revision_required` (400), `invalid_file`, `file_too_large` (413), `invalid_material`, `invalid_prerequisite`, `version_incomplete`, `classification_invalid`, `attachment_limit_exceeded`; konflikty (409) obejmują m.in. `stale_revision`, `invalid_version_state`, `working_version_exists`, `asset_in_use`, `course_not_approved`, `course_inactive`, `slot_taken`, `task_blocked`, `cycle_already_active`, `instance_closed`.
-
-Brak logowania: `401 not_authenticated`; brak roli mentor/admin na endpointach zarządzania: `403 forbidden`. Brak dostępu do konkretnego kursu lub mutacja mentora publicznego kursu po publikacji: `404 not_found` (także DELETE i lifecycle), nie `403`. Admin próbujący `publish` cudzej pierwszej wersji: `403 forbidden`. Dostęp jest sprawdzany przed ujawnieniem stanu/rewizji; uprawniony klient otrzymuje `409 invalid_version_state`, `400 revision_required` lub `409 stale_revision` zależnie od żądania. Resubmit bez odrzuconej wersji: `409 course_not_rejected`; PATCH widoczności: `400 visibility_immutable`, metadanych treści: `400 version_fields_required`.
+W rodzinach endpointów kursów, instancji, słowników i moderacji odpowiedzi błędów mają format `{"message": "...", "code": "...", ...}`. Inne pola — np. `issues`, `dependencies` lub szczegóły walidacji — mogą wystąpić dodatkowo. Kody statusów: `400 validation_error`, `401 not_authenticated`, `403 forbidden` (lub `csrf_failed`), `404 not_found`, `405 method_not_allowed`, `409 conflict`, `413 request_too_large`, `415 unsupported_media_type`, `429 throttled`, `500 internal_error`, `503 service_unavailable`. Błędy walidacji plików i treści zachowują kod domenowy, np. `revision_required` (400), `invalid_file`, `file_too_large` (413), `invalid_material`, `invalid_prerequisite`, `version_incomplete`, `classification_invalid`, `attachment_limit_exceeded`; konflikty (409) obejmują m.in. `stale_revision`, `invalid_version_state`, `working_version_exists`, `asset_in_use`, `course_not_approved`, `course_inactive`, `slot_taken`, `instance_closed`.
 
 ### Trasy frontendu
 
-Trasy kursów wymagają logowania; wejścia zarządzania/edycji wymagają roli mentor/admin, ale sama rola nie daje prawa mutacji. Autor publicznego kursu po publikacji zachowuje widok read-only.
+Trasy kursów wymagają logowania; zarządzanie i edycja wymagają roli mentor/admin.
 
 | Trasa | Widok |
 |---|---|
 | `/kursy` | Katalog tylko opublikowanych, aktywnych kursów publicznych; pokazuje program (drzewo działów/tematów/lekcji), bez materiałów i testów; mentor/admin ma przycisk „Utwórz nowy” i wejście do „Moich kursów” |
-| `/nauka` | Zalogowany uczeń widzi własne aktywne instancje i historię zamkniętych; instancja, w której jest tylko mentorem, nie trafia do panelu |
 | `/kursy/{id}` | Szczegóły widocznego kursu i dołączanie |
 | `/kursy/dolacz/{token}` | Dołączenie do kursu prywatnego przez link |
-| `/kursy/instancje/{id}` | Instancja i przypięta treść; nowa tablica cykli lekcji zastępuje dotychczasową tablicę zadań w UI; uczeń oraz przypisany mentor zachowują uprawnienia do obsługi |
-| `/kursy/moje` | Mentor: własne; admin: wszystkie publiczne i własne private, bez cudzych private |
+| `/kursy/instancje/{id}` | Instancja ucznia, postęp, zadania i treść przypiętej wersji |
+| `/kursy/moje` | Lista kursów mentora/admina |
 | `/kursy/moje/nowy` | Utworzenie tożsamości kursu i wersji 1 w stanie roboczym |
-| `/kursy/moje/{id}` | Zarządzanie kursem/planem/wersjami; autor publicznego po publikacji read-only, z licznikiem i podglądami; DELETE 200 zostaje na stronie z komunikatem archiwizacji, 204 wraca do listy |
-| `/kursy/moje/{id}/wersje/{versionId}/edytuj` | Edycja `draft`/`rejected` tylko z prawem mutacji; bez niego pełna treść read-only, nie formularz zapisu |
+| `/kursy/moje/{id}` | Zarządzanie kursem, planem godzinowym, wersjami i tokenem |
+| `/kursy/moje/{id}/wersje/{versionId}/edytuj` | Edytor wersji kursu |
 | `/kursy/podglad/{id}/wersje/{versionId}` | Podgląd SPA; przełącznik pełnego widoku i „Oczami ucznia”; moderator może stąd podjąć decyzję |
 | `/course-moderation/` | Kolejka moderacji administratora |
-
-Frontend sprawdza historię publikacji, nie sam numer wersji. Gdy potrzebne dane `mine` nie zostaną pobrane, pokazuje błąd i blokuje zależne mutacje; podgląd może zachować odczytaną treść. Błąd licznika w read-only autora nie jest zastępowany liczbą z listy instancji. Widok zarządzania autora nie udostępnia kontrolek zapisu instancji, ale uprawnienia przypisanego mentora na trasie instancji/API pozostają bez zmian.
-
-### Zarządzanie i usuwanie kursów — QA PASS 08.11.2026
-
-Przekazane niezależne QA: **PASS bez blockerów** dla tej zmiany; nie uruchamiano testów ponownie przy aktualizacji dokumentacji. Backend: `docker exec ... manage.py test learning.tests users.tests --noinput --verbosity 0` — **354 OK**; frontend: `npm.cmd test -- tests/courses` — **214 PASS**, management + version-access — **48 PASS**, build PASS. `makemigrations --check --dry-run` — bez zmian; diff-check clean.
-
-Audyt ryzyka nie wykazał blockerów. Wcześniejszych 7 niepowodzeń auth/navigation nie ponawiano i nie powiązano z tą zmianą — nie jest to potwierdzenie zielonego pełnego frontendu. Nie wykonano pełnego testu screen reader/E2E; kolejności TDD nie dało się niezależnie zweryfikować. Nadal należy zapewnić harmonogram `cleanup_course_assets`; PASS nie usuwa tych ograniczeń.
 
 ### Kursy v1 — ograniczenia i weryfikacja (30.10.2026)
 
 Weryfikacja funkcji: backend SQLite **316 OK / 8 skip**, PostgreSQL **316/316 OK**, `makemigrations --check` bez zmian, `manage.py check` — **0 issues**; frontend **230 passed / 1 skip**, build OK, smoke API OK; niezależne QA — **POZYTYWNY**. Niestabilny test frontendu `join-by-token` (wyścig mocka POST) ustabilizowano synchronizacją w teście; 30/30 przebiegów OK. QA nie zweryfikowało ręcznie responsywności J6 w pełnej przeglądarce.
 
-Ograniczenia: v1 nie obsługuje rozwiązywania ani oceniania testów; wymagania `NodePrerequisite` w treści kursu pozostają informacyjne (w odróżnieniu od egzekwowanych zależności `CourseTask` planu opisanych wyżej); walidacja plików nie jest skanowaniem antywirusowym. Responsywność J6 nie została zweryfikowana manualnie w pełnej przeglądarce przez QA.
-
-### Plan nauki i poprzednia tablica zadań — historyczne QA 01.11.2026
-
-Poniższy wynik QA i opis dotyczą poprzedniej tablicy zadań oraz `InstanceCycle`; nie są wynikiem QA nowej tablicy kalendarzowych cykli lekcji.
-
-Niezależne QA: **PASS, bez blockerów**, po poprawieniu trzech problemów P2 (widok tablicy mentora, sprzeczny test legacy i typy OpenAPI). Backend: pełny przebieg SQLite **327 PASS / 8 SKIP** z 335 testów; testy celowane cykli/schematu/usług **50 PASS**; `makemigrations --check --dry-run` bez zmian i `manage.py check` — 0 problemów. Przebieg współbieżności PostgreSQL pominięto. Frontend: testy kursów **186 PASS**, build PASS, wybrane 8 plików **104 PASS**; pełny zestaw **332 PASS / 7 FAIL / 1 SKIP**. Wszystkie 7 niepowodzeń pełnego przebiegu potwierdzono jako istniejące już wcześniej konflikty testów logowania/sesji/nawigacji/zaufanej przeglądarki; nie przedstawiaj pełnego zestawu jako zielonego. Testy TDD funkcji zakończono wynikiem 80 PASS po 42 niepowodzeniach i 38 zaliczeniach w fazie RED.
-
-Znane granice tego odbioru: nie wykonano rzeczywistego E2E w przeglądarce, testów PostgreSQL ani oceny zoomu mobilnego, kontrastu i czytnika ekranu. Dostępnościowy test klawiatury w jsdom przeszedł. Generowanie OpenAPI nadal zgłasza istniejące ostrzeżenia serializerów users/content i kolizję `operationId`; nie zostały usunięte w tym zakresie.
+Ograniczenia: v1 nie obsługuje rozwiązywania ani oceniania testów; wymagania wstępne nie są egzekwowane; walidacja plików nie jest skanowaniem antywirusowym. Responsywność J6 nie została zweryfikowana manualnie w pełnej przeglądarce przez QA.
 
 ## Konfiguracja
 
@@ -566,7 +440,7 @@ docker compose up -d mailpit
 
 ## Weryfikacja zaufanej przeglądarki — 30.10.2026
 
-Historyczne QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji względem bazowego HEAD `a4e233a` z roboczymi zmianami funkcji, nie ponowne uruchomienie testów w ramach aktualizacji dokumentacji. Ówczesne zachowanie cofania zaufania przy logout zastąpiła zmiana z 08.11.2026 opisana powyżej; wyniki poniżej pozostają zapisem historycznym.
+QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji względem bazowego HEAD `a4e233a` z roboczymi zmianami funkcji, nie ponowne uruchomienie testów w ramach aktualizacji dokumentacji.
 
 - TDD autorów: backend — faza RED 29 testów, 26 niepowodzeń → 29 zielonych; pełny zestaw 236 OK, 1 pominięty. Frontend — 16 niepowodzeń i 50 zaliczonych → 66 zielonych; pełny zestaw 143 zaliczone, 1 pominięty; build OK.
 - Niezależne QA backendu: pełny zestaw 236 OK, 1 pominięty; testy celowane 29 OK (`users.tests.test_trusted_browser_contract`); `check` — 0 problemów; `makemigrations` — brak zmian. Dodatkowe 6 testów uruchomionych przez stdin: wszystkie OK, bez utrwalania plików.
@@ -574,18 +448,8 @@ Historyczne QA PASS, bez blockerów. Poniżej wyniki przekazane po implementacji
 - Chrome, smoke z syntetycznym HTTP: checkbox przy 390×844 oraz ponawianie wylogowania przy szerokości 1280 px — bez poziomego overflow.
 - Nie wykonano pełnego rzeczywistego E2E frontend + backend, testów tej funkcji na PostgreSQL, prawdziwego Google OAuth, testu na fizycznym telefonie ani z czytnikiem ekranu/pełnego audytu WCAG. Wcześniejsze QA lokalnego Dockera nie zastępuje tych kontroli.
 
-## Zaufanie po wylogowaniu i konflikt logowania — QA PASS 08.11.2026
-
-Wyniki przekazane z odbioru; przy aktualizacji dokumentacji sprawdzono kod i testy kontraktowe, ale nie uruchamiano ponownie testów ani builda.
-
-- Główne środowisko backendu: `users` — **103 OK**; ostatni przebieg kontraktu `users.tests.test_trusted_browser_contract` — **29 OK**.
-- Frontend: testy celowane — **92 PASS**; pełny zestaw — **396 PASS, 1 skipped**; build **PASS** z nieblokującym ostrzeżeniem chunk **501.42 kB**; diff-check **PASS**.
-- Niezależne QA: **bez blockerów**. Własne uruchomienie testów backendu przez agenta QA było zablokowane przez wersję allauth w jego środowisku; nie jest to błąd głównego przebiegu backendu, który wykonano poprawnie w głównym środowisku.
-- Nie wykonano testu w realnym Chrome z natywnym autofill. Aplikacja inicjalizuje puste pola i nie utrwala emaila/hasła, ale nie usuwa poświadczeń zapisanych przez przeglądarkę i nie gwarantuje pustych pól przy aktywnym autofill. Google poza zakresem.
-- Potwierdzony kontrakt: poprawny OTP z `remember_browser=true` wydaje zaufanie; logout z aktywną lub wygasłą sesją zachowuje cookie i rekord bez rotacji i odnowienia TTL. Nadal wymagane jest poprawne hasło, a zmiana hasła lub wygaśnięcie ponownie wymuszają OTP. Przy `409` frontend sprawdza sesję i potwierdza logout przed jednokrotnym ponowieniem wpisanych danych; niepotwierdzony logout zatrzymuje ponowienie i nie wymienia starej sesji na token.
-- Ryzyka pozostają: token DRF nie jest unieważniany po logout; skopiowane ważne cookie może pomijać OTP do końca TTL, lecz nadal wymaga poprawnego hasła. Nie jest to pełny audyt bezpieczeństwa.
-
 ## Następne kroki
 
 - Zaproszenia imienne uczniów przez mentora (planowane; obecnie działa dołączenie przez link z tokenem)
+- SOMA Cycle modele i API
 - Osobny zakres bezpieczeństwa: unieważnianie tokenów DRF po wylogowaniu/resecie hasła; automatyczny cleanup wygasłych zaufanych przeglądarek pozostaje niezaimplementowany.

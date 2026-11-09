@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
-import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, logout, logoutUnconfirmedError, postJson, responseError } from './authApi.js'
+import { connectionError, csrfToken, deleteJson, ensureCsrf, exchangeToken, getJson, postJson, responseError } from './authApi.js'
 import { clearToken } from './courses/api.js'
 
 function AuthLayout({ title, children }) {
@@ -298,7 +298,6 @@ const googleCallback = new URL('/logowanie/google/callback', frontendBase).href
 
 export function LoginPage() {
   const [stage, setStage] = useState('password')
-  const [loginEmail, setLoginEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -344,7 +343,6 @@ export function LoginPage() {
     setBusy(true)
     setError('')
     let finishing = stage === 'exchange'
-    let endingConflictingSession = false
     const finish = () => {
       finishing = true
       return finishLogin()
@@ -353,35 +351,16 @@ export function LoginPage() {
       if (stage === 'exchange') {
         await finish()
       } else if (stage === 'password') {
-        const credentials = {
+        const { response, payload } = await postJson('/_allauth/browser/v1/auth/login', {
           email: form.get('email'), password: form.get('password'),
-        }
-        let { response, payload } = await postJson('/_allauth/browser/v1/auth/login', credentials)
-        if (response.status === 409) {
-          const session = await getJson('/_allauth/browser/v1/auth/session')
-          if (session.response.status === 200 && session.payload.meta?.is_authenticated === true) {
-            endingConflictingSession = true
-            await logout()
-            endingConflictingSession = false
-            const retry = await postJson('/_allauth/browser/v1/auth/login', credentials)
-            response = retry.response
-            payload = retry.payload
-          } else if (
-            ![200, 401].includes(session.response.status)
-            || session.payload.meta?.is_authenticated !== false
-          ) {
-            setError(responseError(session.response, session.payload))
-            return
-          } else {
-            setError(responseError(response, payload))
-            return
-          }
-        }
+        })
         const pending = (id) => payload.data?.flows?.some((flow) => flow.id === id && flow.is_pending)
         if (response.status === 401 && payload.meta?.is_authenticated === false && pending('login_by_code')) {
           codeReceived()
         } else if (response.status === 200 && payload.meta?.is_authenticated === true && !payload.errors?.length) {
           // Trusted browser: the backend skipped OTP after a correct password.
+          await finish()
+        } else if (response.status === 409 && payload.meta?.is_authenticated === true) {
           await finish()
         } else if (pending('verify_email')) {
           setError('Potwierdź email przed logowaniem. Sprawdź wiadomość z linkiem aktywacyjnym.')
@@ -401,15 +380,9 @@ export function LoginPage() {
         }
       }
     } catch (failure) {
-      if (endingConflictingSession || failure.message === logoutUnconfirmedError) {
-        setError(logoutUnconfirmedError)
-      } else if (stage === 'code' || finishing) {
-        setError(failure.message === 'Failed to fetch'
-          ? connectionError
-          : 'Nie udało się dokończyć logowania. Spróbuj ponownie.')
-      } else {
-        setError(connectionError)
-      }
+      setError(stage === 'code' || finishing
+        ? failure.message === 'Failed to fetch' ? connectionError : 'Nie udało się dokończyć logowania. Spróbuj ponownie.'
+        : connectionError)
     } finally {
       setBusy(false)
     }
@@ -448,22 +421,9 @@ export function LoginPage() {
       {stage !== 'complete' && <form key={stage} onSubmit={submit} aria-busy={busy}>
         {stage === 'password' ? <>
           <label htmlFor="login-email">Email</label>
-          <input
-            id="login-email"
-            name="email"
-            type="email"
-            autoComplete={loginEmail ? 'username' : 'off'}
-            value={loginEmail}
-            onChange={(event) => setLoginEmail(event.target.value)}
-            required
-            disabled={busy}
-          />
+          <input id="login-email" name="email" type="email" autoComplete="username" required disabled={busy} />
           <label htmlFor="login-password">Hasło</label>
-          <PasswordInput
-            id="login-password"
-            autoComplete={loginEmail ? 'current-password' : 'off'}
-            disabled={busy || !loginEmail.trim()}
-          />
+          <PasswordInput id="login-password" autoComplete="current-password" disabled={busy} />
           <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Logowanie…' : 'Zaloguj się'}</button>
         </> : stage === 'code' ? <>
           <label htmlFor="login-code">Kod weryfikacyjny</label>
@@ -474,7 +434,7 @@ export function LoginPage() {
             <label htmlFor="remember-browser">Zapamiętaj mnie w tej przeglądarce</label>
           </div>
           <p className="login-notice trust-help" id="remember-browser-help">
-            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach ani po wylogowaniu. Wylogowanie kończy sesję, ale nie usuwa zaufania tej przeglądarki. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki.
+            Przez 24 godziny od potwierdzenia tego kodu logowanie w tej przeglądarce nie będzie wymagało kodu z emaila. Hasło nadal będzie wymagane, a okres nie przedłuża się przy kolejnych logowaniach. Nie zaznaczaj na współdzielonym urządzeniu ani wspólnym profilu przeglądarki. Wylogowanie cofa to zaufanie.
           </p>
           <button className="button button-primary" type="submit" disabled={busy || !remaining}>{busy ? 'Weryfikowanie…' : 'Potwierdź kod'}</button>
           <button className="button button-secondary" type="button" onClick={resend} disabled={busy || resendLocked || !remaining || cooldown > 0}>
@@ -486,7 +446,6 @@ export function LoginPage() {
       {notice && <p className="auth-status" role="status">{notice}</p>}
       {stage === 'code' && <button className="auth-reset" type="button" disabled={busy} onClick={() => {
         setStage('password')
-        setLoginEmail('')
         setCode('')
         setRememberBrowser(false)
         setError('')
@@ -504,10 +463,7 @@ export function LoginPage() {
         <p className="auth-links">Nie masz konta? <Link className="text-link" to="/rejestracja">Zarejestruj się</Link></p>
         <p className="auth-links">Nie pamiętasz hasła? <Link className="text-link" to="/logowanie/reset-hasla">Zresetuj hasło</Link></p>
       </>}
-      {stage === 'complete' && <>
-        <Link className="text-link" to="/nauka">Przejdź do mojej nauki</Link>
-        <Link className="text-link" to="/kursy">Przejdź do kursów</Link>
-      </>}
+      {stage === 'complete' && <Link className="text-link" to="/kursy">Przejdź do kursów</Link>}
     </AuthLayout>
   )
 }
@@ -536,10 +492,7 @@ export function GoogleCallbackPage() {
       {failed || state.error ? <p className="auth-error" role="alert">{state.error || 'Logowanie przez Google zostało przerwane lub nie powiodło się. Spróbuj ponownie.'}</p>
         : <p className="auth-status" role="status">{state.busy ? 'Kończenie logowania…' : 'Jesteś zalogowany. Witaj w SOMA Learn!'}</p>}
       {failed || state.error ? <Link className="text-link" to="/logowanie">Wróć do formularza</Link>
-        : !state.busy && <>
-          <Link className="text-link" to="/nauka">Przejdź do mojej nauki</Link>
-          <Link className="text-link" to="/kursy">Przejdź do kursów</Link>
-        </>}
+        : !state.busy && <Link className="text-link" to="/kursy">Przejdź do kursów</Link>}
     </AuthLayout>
   )
 }

@@ -64,7 +64,12 @@ describe('production tile shell', () => {
     const entrypoint = readFileSync(file('src/main.jsx'), 'utf8')
     const stylesheets = [...entrypoint.matchAll(/import\s+['"](\.\/[^'"]+\.css)['"]/g)].map(match => match[1])
     expect(stylesheets).toEqual(['./styles.css', './app-shell.css'])
-    expect(readFileSync(file('src/App.jsx'), 'utf8')).not.toMatch(/import\s+['"]\.\/app-shell\.css['"]/)
+    const app = readFileSync(file('src/App.jsx'), 'utf8')
+    expect(app).not.toMatch(/function HomePage\s*\(/)
+    expect(app).not.toMatch(/function SomaGraphic\s*\(|const learningSteps\s*=/)
+    expect(app).toContain("import SomaHomePage, { HomeLogo } from './home/HomePage.jsx'")
+    const baseStyles = readFileSync(file('src/styles.css'), 'utf8')
+    expect(baseStyles).not.toMatch(/(^|\n)\s*\.(?:hero|method-section|people-section|cycle-graphic|closing-section|simple-page-art)\b/m)
   })
 
   it('uses scoped tokens and real wrapping, never hiding overflow', () => {

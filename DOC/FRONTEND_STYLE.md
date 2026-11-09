@@ -72,6 +72,8 @@ Kod: [HomePage.jsx](../frontend/src/home/HomePage.jsx), [home.css](../frontend/s
 
 **Kolejność kaskady:** `main.jsx` importuje `styles.css`, następnie `app-shell.css`. Nie przenoś importu shellu do App przed style bazowe: niezależne QA ujawniło P2, w którym reguły bazowe wygrywały z nadpisaniami. Kolejność poprawiono i potwierdzono testem oraz stylami computed w przeglądarce.
 
+`App.jsx` nie zawiera alternatywnej implementacji homepage: `/` renderuje wyłącznie `home/HomePage.jsx`. Nieużywane stare komponenty i ich selektory marketingowe usunięto z `App.jsx` oraz `styles.css`; test shellu blokuje ich ponowne dodanie i sprawdza wymagane importy arkuszy.
+
 Usunięte pliki wariantów ABC: `frontend/src/design-preview/HomeVariants.jsx`, `frontend/src/design-preview/homeVariants.css`, `frontend/tests/design-preview.test.jsx`. Nie dotyczy to `courses/VersionPreviewPage.jsx`. Trasy i użytkowe zasady kursów opisuje [frontend README](../frontend/README.md#trasy-i-zakres), bez powielania kontraktów API tutaj.
 
 Przy zmianach wymagaj TDD i niezależnego QA: treść, linki i auth/retry, klawiatura/skip/kotwice, reduced motion, kontrast faktycznych kolorów, polski font, overflow przy 320/390 px i desktop, reflow oraz regresja wypełnionych kursów, edytorów i auth. Sprawdzaj też NotFound dla `/wzory/*`.
