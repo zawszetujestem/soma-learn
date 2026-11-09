@@ -131,7 +131,7 @@ def remove_lesson(user, instance_id, cycle_id, lesson_id):
 LESSON_TRANSITIONS = {
     'todo': {'in_progress'},
     'revision': {'in_progress'},
-    'in_progress': {'review'},
+    'in_progress': {'todo', 'review'},
     'review': {'revision', 'done'},
     'done': set(),
 }

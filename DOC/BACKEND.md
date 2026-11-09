@@ -340,7 +340,7 @@ Podstawowe endpointy kursów, zadań planu i instancji pozostają dostępne pod 
 
 `InstanceLessonProgress` przechowuje stan dla pary **(instancja, lekcja)**, niezależnie od wyboru lekcji do cyklu. Zmiana lub zamknięcie cyklu, usunięcie lekcji z planu czy jej ponowne wybranie nie resetuje postępu. To osobny model od `CourseTask`, `InstanceCycleTask` i ich endpointów; testy pozostają treścią lekcji, bez zapisu prób ani automatycznego oceniania.
 
-Statusy postępu: `todo`, `revision`, `in_progress`, `review`, `done`. Dozwolona ścieżka to `todo` lub `revision` → `in_progress` → `review` → `revision` lub `done`; `done` jest końcowy. Dla każdej instancji może być najwyżej jedna lekcja `in_progress`. Status `revision` oznacza „do poprawy”; licznik `revision` w projekcji jest odrębnym numerem rewizji rekordu postępu, zaczyna się od `1` przy pierwszym zapisie i rośnie po każdej zaakceptowanej zmianie.
+Statusy postępu: `todo`, `revision`, `in_progress`, `review`, `done`. Dozwolone przejścia: `todo` lub `revision` → `in_progress`; `in_progress` → `todo` lub `review`; `review` → `revision` lub `done`. `done` jest końcowy. Dla każdej instancji może być najwyżej jedna lekcja `in_progress`; odłożenie jej przez `in_progress` → `todo` zwalnia ten slot. Status `revision` oznacza „do poprawy”; pole `revision` w projekcji jest odrębnym numerem rewizji rekordu postępu, zaczyna się od `1` przy pierwszym zapisie i rośnie o `1` po każdej zaakceptowanej zmianie, w tym odłożeniu.
 
 #### Projekcja
 
@@ -360,7 +360,7 @@ Statusy postępu: `todo`, `revision`, `in_progress`, `review`, `done`. Dozwolona
 }
 ```
 
-`status` jest żądanym stanem; `expected_status` i `expected_revision` muszą odpowiadać aktualnemu stanowi. To preconditions chroniące przed nadpisaniem nowszej zmiany. Pierwsze przejście z domyślnego `todo`/rewizji `0` tworzy rekord z rewizją `1`; odpowiedź `200` zawiera aktualną projekcję. Polecenie jest dostępne uczniowi instancji i przypisanemu jej mentorowi, gdy lekcja należy do przypiętej wersji, jest wybrana w aktywnym cyklu, a sama instancja nie jest zamknięta. Zamknięta instancja pozostaje tylko do odczytu.
+`status` jest żądanym stanem; `expected_status` i `expected_revision` muszą odpowiadać aktualnemu stanowi. To preconditions chroniące przed nadpisaniem nowszej zmiany. Pierwsze przejście z domyślnego `todo`/rewizji `0` tworzy rekord z rewizją `1`; każda kolejna zaakceptowana zmiana zwiększa rewizję o `1`. Odpowiedź `200` zawiera aktualną projekcję. Polecenie jest dostępne uczniowi instancji i przypisanemu jej mentorowi, gdy lekcja należy do przypiętej wersji, jest wybrana w aktywnym cyklu, a sama instancja nie jest zamknięta. Zamknięta instancja pozostaje tylko do odczytu. Poza dodanym przejściem `in_progress` → `todo` pozostałe przejścia, uprawnienia i warunki walidacji pozostają bez zmian.
 
 Konflikty zwracają `409` z kodem:
 
@@ -376,7 +376,11 @@ Odpowiedzi błędów zawierają bezpieczne, niepuste `message`; nie należy opie
 
 #### Migracja i wymóg operacyjny
 
-Migracja `backend/learning/migrations/0008_instance_lesson_progress.py` (zależna od `0007_lesson_cycles`) jest addytywna: dodaje tabelę i ograniczenia postępu, nie zmienia istniejących cykli ani nie tworzy domyślnych rekordów `todo`. Przed udostępnieniem API/tej funkcji należy zastosować migracje przez `python manage.py migrate`. W chwili aktualizacji dokumentacji migracja nie była zastosowana do aplikacyjnej bazy danych; wdrożenie i migracja produkcyjnej bazy nie zostały wykonane.
+Migracja `backend/learning/migrations/0008_instance_lesson_progress.py` (zależna od `0007_lesson_cycles`) jest addytywna: dodaje tabelę i ograniczenia postępu, nie zmienia istniejących cykli ani nie tworzy domyślnych rekordów `todo`. Przed udostępnieniem API/tej funkcji należy zastosować migracje przez `python manage.py migrate`. Wdrożenie i migracja produkcyjnej bazy nie zostały wykonane.
+
+#### Operacja danych w lokalnej bazie Compose
+
+W lokalnej aplikacyjnej bazie Compose zaktualizowano prywatny kurs testowy `id=3` (mentor `mentor@mentor.pl`). Opublikowana wersja V1 `id=4` pozostała w stanie `published`; jej `revision` wzrosła z `2` do `3`. Dodano dział „Algebra, geometria i potęgi” z tematami „Wyrażenia i równania algebraiczne”, „Geometria płaska” i „Potęgi i pierwiastki”: łącznie 6 lekcji (po 2 na temat) i 30 pytań; każda lekcja ma teorię, praktykę i 5 pytań. Nowe lekcje pozostają w backlogu. Istniejące instancje, cykle, wybory lekcji i postępy nie uległy zmianie. Operacja dotyczy wyłącznie lokalnej bazy; nie dodano seedera dla innych środowisk i nie należy zakładać, że te dane są tam obecne.
 
 ### Błędy API
 

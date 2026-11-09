@@ -1,3 +1,5 @@
+import LessonContentPreview from './LessonContentPreview.jsx'
+
 // Lesson workflow is separate from CourseTask and from planned-cycle selection.
 export const lessonStatuses = [
   ['todo', 'Do zrobienia'],
@@ -9,7 +11,7 @@ export const lessonStatuses = [
 const transitions = {
   todo: ['in_progress'],
   revision: ['in_progress'],
-  in_progress: ['review'],
+  in_progress: ['todo', 'review'],
   review: ['revision', 'done'],
   done: [],
 }
@@ -36,7 +38,7 @@ function topicSummary(entries, progress) {
   )).join(' · ')
 }
 
-export default function LessonProgressBoard({ entries, projection, canEdit, movable, onMove, buttonRefs }) {
+export default function LessonProgressBoard({ entries, projection, canEdit, movable, onMove, buttonRefs, courseId, versionId }) {
   const progressById = new Map((projection.lesson_progress || []).map(item => [item.lesson_id, item]))
   const progress = id => progressById.get(id) ?? { lesson_id: id, status: 'todo', revision: 0 }
   // The projection includes progress outside this cycle/selection. Never scope the lock to cards.
@@ -61,7 +63,7 @@ export default function LessonProgressBoard({ entries, projection, canEdit, mova
       {inProgress && <p className="courses-banner">
         {outsideLock
           ? 'Lekcja poza aktywnym cyklem jest w trakcie. Przekaż ją do sprawdzenia przed rozpoczęciem kolejnej; jeśli jest niedostępna, skontaktuj się z mentorem.'
-          : 'Jedna lekcja jest w trakcie. Przekaż ją do sprawdzenia, aby rozpocząć kolejną — nie musisz czekać na sprawdzenie.'}
+          : 'Jedna lekcja jest w trakcie. Cofnij ją do „Do zrobienia” lub przekaż do sprawdzenia, aby rozpocząć kolejną — nie musisz czekać na sprawdzenie.'}
       </p>}
       <section className="lesson-progress-summaries" aria-label="Podsumowanie tematów">
         {groups.map(group => <div key={group.key}>
@@ -102,11 +104,15 @@ export default function LessonProgressBoard({ entries, projection, canEdit, mova
                         ref={element => { if (!canEdit || terminal) buttonRefs.current[lesson.id] = element }}
                         draggable={Boolean(editable)}
                         onDragStart={event => {
-                          if (!editable) { event.preventDefault(); return }
+                          if (!editable || event.target.closest('details, select, label, a, button, input, textarea')) {
+                            event.preventDefault()
+                            return
+                          }
                           event.dataTransfer.setData(dragType, String(lesson.id))
                           event.dataTransfer.effectAllowed = 'move'
                         }}>
                         <span className="lesson-progress-title">{lesson.title}</span>
+                        <LessonContentPreview lesson={lesson} courseId={courseId} versionId={versionId} />
                         {canEdit && !terminal && <label>
                           <span className="sr-only">Zmień status: {lesson.title}</span>
                           <select value={current.status} disabled={!editable}

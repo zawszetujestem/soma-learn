@@ -69,7 +69,10 @@ class LessonProgressAPITests(ProgressFixture, TestCase):
             self.client.force_authenticate(user)
             current = 'todo'
             revision = 0
-            for status in ('in_progress', 'review', 'revision', 'in_progress', 'review', 'done'):
+            for status in (
+                'in_progress', 'todo', 'in_progress', 'review', 'revision',
+                'in_progress', 'review', 'done',
+            ):
                 revision += 1
                 response = self.patch(status, current, revision - 1, lesson=lesson.pk)
                 self.assert_progress(response, status, revision, lesson.pk)
@@ -82,7 +85,7 @@ class LessonProgressAPITests(ProgressFixture, TestCase):
     def test_every_invalid_transition_is_atomic(self):
         allowed = {
             'todo': {'in_progress'}, 'revision': {'in_progress'},
-            'in_progress': {'review'}, 'review': {'revision', 'done'}, 'done': set(),
+            'in_progress': {'todo', 'review'}, 'review': {'revision', 'done'}, 'done': set(),
         }
         model = progress_model()
         for current, targets in allowed.items():
@@ -124,6 +127,56 @@ class LessonProgressAPITests(ProgressFixture, TestCase):
                 self.error(response, 400, 'validation_error')
                 self.assertTrue(set(response.json()) - {'code', 'message'})
         self.assertEqual(progress_model().objects.count(), 0)
+
+    def test_return_to_todo_preserves_row_revision_cas_and_rejects_aba(self):
+        self.assert_progress(self.patch('in_progress'), 'in_progress', 1)
+        row = progress_model().objects.get(instance=self.instance, lesson=self.lesson)
+        for expected_status, expected_revision in (('todo', 1), ('in_progress', 0)):
+            self.error(self.patch('todo', expected_status, expected_revision),
+                       409, 'stale_lesson_progress')
+            self.assert_progress(self.client.get(self.base), 'in_progress', 1)
+        self.assert_progress(self.patch('todo', 'in_progress', 1), 'todo', 2)
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.revision), ('todo', 2))
+        self.assertEqual(progress_model().objects.count(), 1)
+        self.assert_progress(self.patch('in_progress', 'todo', 2), 'in_progress', 3)
+        for target in ('todo', 'review'):
+            self.error(self.patch(target, 'in_progress', 1), 409, 'stale_lesson_progress')
+            self.assert_progress(self.client.get(self.base), 'in_progress', 3)
+
+    def test_return_to_todo_releases_global_slot_for_another_cycle(self):
+        self.assert_progress(self.patch('in_progress'), 'in_progress', 1)
+        self.error(self.patch('in_progress', lesson=self.second.pk),
+                   409, 'lesson_in_progress_exists')
+        self.assert_progress(self.patch('todo', 'in_progress', 1), 'todo', 2)
+        self.action(self.cycle, 'close')
+        planned = self.create().json()['planned_cycle']['id']
+        self.action(planned, 'lessons', {'lesson_id': self.second.pk})
+        self.action(planned, 'start')
+        self.assert_progress(self.patch('in_progress', cycle=planned, lesson=self.second.pk),
+                             'in_progress', 1, self.second.pk)
+        self.assert_progress(self.client.get(self.base), 'todo', 2)
+
+    def test_return_to_todo_preserves_access_and_lifecycle_restrictions(self):
+        self.assert_progress(self.patch('in_progress'), 'in_progress', 1)
+        for user, status, code in (
+            (self.owner, 404, 'not_found'), (self.other, 404, 'not_found'),
+            (None, 401, 'not_authenticated'),
+        ):
+            self.client.force_authenticate(user)
+            self.error(self.patch('todo', 'in_progress', 1), status, code)
+        self.client.force_authenticate(self.student)
+        self.assert_progress(self.client.get(self.base), 'in_progress', 1)
+        self.instance.status = 'closed'
+        self.instance.save()
+        for user in (self.student, self.mentor):
+            self.client.force_authenticate(user)
+            self.error(self.patch('todo', 'in_progress', 1), 409, 'instance_closed')
+        self.instance.status = 'active'
+        self.instance.save()
+        self.action(self.cycle, 'close')
+        self.error(self.patch('todo', 'in_progress', 1), 409, 'lesson_cycle_not_active')
+        self.assert_progress(self.client.get(self.base), 'in_progress', 1)
 
     def test_one_in_progress_global_and_review_releases_slot(self):
         self.assert_progress(self.patch('in_progress'), 'in_progress', 1)

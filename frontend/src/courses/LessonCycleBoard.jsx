@@ -241,6 +241,7 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
         {active ? <>
           <p>{displayCycleDates(active)}</p>
           {activeEntries.length ? <LessonProgressBoard entries={activeEntries} projection={state.data}
+            courseId={content.course} versionId={content.id}
             canEdit={canEdit} movable={movable} buttonRefs={buttonRefs}
             onMove={(lessonId, status, previous) => mutate(() => coursesApi.updateLessonProgress(
               instanceId, active.id, lessonId,
