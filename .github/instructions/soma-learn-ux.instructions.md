@@ -9,4 +9,6 @@ Późniejsze jawne zatwierdzenie obejmuje styl wszystkich istniejących widoków
 
 Zachowuj kolejność importów `styles.css` → `app-shell.css` w `main.jsx` i współdzielony istniejący `HomeLogo`, zgodnie z wytycznymi. Nie maskuj overflow.
 
+Używaj istniejących współdzielonych komponentów zamiast kopiować ich strukturę lub styl do kolejnych widoków. Wspólny wygląd i zachowanie zmieniaj w jednym komponencie źródłowym; różnice między miejscami użycia wyrażaj jawnymi wariantami lub propsami. Jeśli element nie ma jeszcze współdzielonego komponentu, wydziel go przed powieleniem implementacji i sprawdź wszystkie jego miejsca użycia.
+
 Pracuj w TDD; w QA sprawdzaj jawne przykłady, planowaną maturę, statyczny preview, lokalny polski font, kontrast, focus, natywne kotwice/reduced motion oraz mobile overflow w wypełnionych widokach auth i kursów, głębokich edytorach i dialogach. Odróżniaj responsive-equivalent reflow od natywnego zoomu, pomiary od inspekcji estetyki oraz historyczny odbiór homepage od osobnego QA jej późniejszych kafelków. Raportuj niewykonane kontrole i niepotwierdzone obserwacje, nie jako naprawione błędy.

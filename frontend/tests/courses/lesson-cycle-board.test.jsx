@@ -269,10 +269,12 @@ describe('cykle lekcji', () => {
     await waitFor(() => expect(screen.getByLabelText('Początek planu')).toBeEnabled())
   })
 
-  it('read-only nie oferuje dat/button/DnD ani nie reaguje na drop', async () => {
+  it('read-only oferuje tylko przyciski podglądu, bez dat/akcji/DnD i nie reaguje na drop', async () => {
     const { calls } = setup(BOTH, {}, { canEdit: false })
     await screen.findByText('Lekcja Z')
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual([
+      'Otwórz lekcję: Lekcja Z', 'Otwórz lekcję: Lekcja A', 'Otwórz lekcję: Lekcja B', 'Otwórz lekcję: Lekcja C',
+    ])
     expect(screen.queryByLabelText('Początek planu')).toBeNull()
     expect(within(region('Pozostałe lekcje')).getAllByRole('listitem')[0]).toHaveAttribute('draggable', 'false')
     fireEvent.drop(region('Plan kolejnego cyklu'), { dataTransfer: { getData: () => '7' } })

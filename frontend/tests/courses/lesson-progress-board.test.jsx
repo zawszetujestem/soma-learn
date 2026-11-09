@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import LessonCycleBoard from '../../src/courses/LessonCycleBoard.jsx'
@@ -36,25 +36,25 @@ const previewContent = {
     }],
   }],
 }
-const disclosure = () => within(card('Lekcja Z')).getByText('Treść lekcji')
+const preview = () => screen.getByRole('dialog', { name: 'Lekcja Z' })
+const opener = (scope = active()) => within(scope).getByRole('button', { name: 'Otwórz lekcję: Lekcja Z' })
+const locations = ['Aktywny cykl', 'Plan kolejnego cyklu', 'Pozostałe lekcje']
+const locatedProjection = location => ({
+  ...projection([progress(9, 'done')]),
+  active_cycle: cycle(5, location === locations[0] ? [9] : [], { status: 'active' }),
+  planned_cycle: cycle(6, location === locations[1] ? [9] : []),
+})
 
 it.each([
   ['todo', true], ['done', true], ['done', false], ['in_progress', false],
-])('natywny podgląd %s (canEdit=%s): teoria, praktyka i test bez kluczy, formularzy i mutacji', async (status, canEdit) => {
+])('modal %s (canEdit=%s): teoria, praktyka i test bez kluczy, formularzy i mutacji', async (status, canEdit) => {
   const { calls } = setup(projection([progress(9, status)]), {}, { content: previewContent, canEdit })
   await screen.findByRole('region', { name: 'Aktywny cykl' })
-  const summary = disclosure()
-  expect(summary.tagName).toBe('SUMMARY')
-  const details = summary.parentElement
-  expect(details.tagName).toBe('DETAILS')
-  expect(details).not.toHaveAttribute('open')
-  // Keep the native keyboard semantics; no custom role/key handler replaces summary.
-  expect(summary).not.toHaveAttribute('role')
   const user = userEvent.setup()
-  await user.tab()
-  expect(summary).toHaveFocus()
-  await user.click(summary)
-  expect(details).toHaveAttribute('open')
+  const trigger = opener()
+  await user.click(trigger)
+  const details = preview()
+  expect(details).toHaveAttribute('aria-modal', 'true')
   expect(within(details).getByText('Teoria lekcji').tagName).toBe('STRONG')
   for (const text of ['Praktyka lekcji', /Pytanie pojedyncze/, /Pytanie wielokrotne/, 'Opcja pierwsza', 'Opcja druga', 'Opcja trzecia']) {
     expect(within(details).getByText(text)).toBeVisible()
@@ -63,16 +63,95 @@ it.each([
   expect(details).toHaveTextContent('wiele odpowiedzi')
   expect(details).not.toHaveTextContent(/TAJNY KLUCZ|poprawna|Rozwiązywanie/)
   expect(details.querySelector('form,input,select,textarea,script,iframe,a[href^="javascript"]')).toBeNull()
-  await user.click(summary)
-  expect(details).not.toHaveAttribute('open')
+  await user.click(within(details).getByRole('button', { name: 'Zamknij' }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(trigger).toHaveFocus()
   expect(calls.map(c => c.method)).toEqual(['GET'])
+})
+
+it.each(locations.flatMap(location => ['click', 'Enter', 'Space', 'tile'].map(mode => [location, mode])))(
+  '%s: %s otwiera modal, Escape przywraca fokus, tło jest inert i Tab pozostaje wewnątrz', async (location, mode) => {
+    const { calls } = setup(locatedProjection(location), {}, { content: previewContent, canEdit: false })
+    const scope = await screen.findByRole('region', { name: location })
+    const trigger = opener(scope)
+    expect(trigger.tagName).toBe('BUTTON')
+    const user = userEvent.setup()
+    if (mode === 'click') await user.click(trigger)
+    else if (mode === 'tile') await user.click(within(scope).getByRole('listitem', { name: 'Lekcja Z' }))
+    else {
+      trigger.focus()
+      await user.keyboard(mode === 'Enter' ? '{Enter}' : ' ')
+    }
+    const dialog = preview()
+    expect(within(dialog).getByText('Teoria lekcji')).toBeVisible()
+    expect(within(dialog).getByText('Praktyka lekcji')).toBeVisible()
+    expect(within(dialog).getByText('Opcja pierwsza')).toBeVisible()
+    expect(dialog).not.toHaveTextContent(/TAJNY KLUCZ|poprawna/)
+    const close = within(dialog).getByRole('button', { name: 'Zamknij' })
+    expect(close).toHaveFocus()
+    expect(scope.closest('[inert]')).not.toBeNull()
+    await user.tab()
+    expect(close).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(close).toHaveFocus()
+    trigger.focus() // Programmatic focus cannot escape, either.
+    expect(close).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(trigger).toHaveFocus()
+    expect(scope.closest('[inert]')).toBeNull()
+    expect(calls.map(c => c.method)).toEqual(['GET'])
+  },
+)
+
+it('modal z linkami zapętla fokus w obu kierunkach i izoluje zdarzenia od tablicy', async () => {
+  const content = {
+    ...previewContent, nodes: [{
+      ...previewContent.nodes[0], children: [{
+        ...previewContent.nodes[0].children[0],
+        theory: [{ id: 1, format: 'markdown', text: '[Materiał](https://example.test/lesson)' }],
+      }],
+    }],
+  }
+  const { calls } = setup(projection(), {}, { content })
+  await screen.findByRole('region', { name: locations[0] })
+  const user = userEvent.setup()
+  await user.click(opener())
+  const dialog = preview()
+  const close = within(dialog).getByRole('button', { name: 'Zamknij' })
+  const link = within(dialog).getByRole('link', { name: 'Materiał' })
+  await user.tab({ shift: true })
+  expect(link).toHaveFocus()
+  await user.tab()
+  expect(close).toHaveFocus()
+  await user.tab()
+  expect(link).toHaveFocus()
+  await user.tab()
+  expect(close).toHaveFocus()
+  const dataTransfer = { getData: () => '9' }
+  expect(fireEvent.dragStart(link, { dataTransfer })).toBe(false)
+  fireEvent.drop(dialog, { dataTransfer })
+  expect(calls.map(c => c.method)).toEqual(['GET'])
+  await user.click(close)
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('zmiana selecta statusu zapisuje wyłącznie status i nie otwiera modala', async () => {
+  const { calls } = setup(projection(), {
+    [`PATCH ${path(9)}`]: ok(projection([progress(9, 'in_progress')])),
+  })
+  await screen.findByRole('region', { name: locations[0] })
+  await userEvent.setup().selectOptions(selector('Lekcja Z'), 'in_progress')
+  await waitFor(() => expect(selector('Lekcja Z')).toHaveValue('in_progress'))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(patches(calls)).toHaveLength(1)
 })
 
 it('podgląd pustej lekcji pokazuje stan pusty bez zapisu', async () => {
   const { calls } = setup()
   await screen.findByRole('region', { name: 'Do zrobienia' })
-  await userEvent.setup().click(disclosure())
-  expect(within(card('Lekcja Z')).getByText('Brak materiałów w tej lekcji.')).toBeVisible()
+  await userEvent.setup().click(opener())
+  expect(within(preview()).getByText('Brak materiałów w tej lekcji.')).toBeVisible()
   expect(patches(calls)).toHaveLength(0)
 })
 
@@ -92,36 +171,94 @@ it('załącznik pobiera leniwie z przypiętej wersji, pokazuje ładowanie, błą
   }, { content })
   await screen.findByRole('region', { name: 'Do zrobienia' })
   expect(calls).toHaveLength(1)
-  await userEvent.setup().click(disclosure())
-  expect(within(card('Lekcja Z')).getByText('Ładowanie załącznika…')).toBeVisible()
+  await userEvent.setup().click(opener())
+  expect(within(preview()).getByText('Ładowanie załącznika…')).toBeVisible()
   await waitFor(() => expect(calls.filter(c => c.path === assetPath)).toHaveLength(1))
   release(fail(403, { message: 'Załącznik niedostępny.' }))
-  expect(await within(card('Lekcja Z')).findByRole('alert')).toHaveTextContent('Załącznik niedostępny.')
-  await userEvent.setup().click(within(card('Lekcja Z')).getByRole('button', { name: 'Spróbuj ponownie' }))
+  expect(await within(preview()).findByRole('alert')).toHaveTextContent('Załącznik niedostępny.')
+  await userEvent.setup().click(within(preview()).getByRole('button', { name: 'Spróbuj ponownie' }))
   await waitFor(() => expect(calls.filter(c => c.path === assetPath)).toHaveLength(2))
   release(fail(503, { message: 'Spróbuj później.' }))
-  expect(await within(card('Lekcja Z')).findByRole('alert')).toHaveTextContent('Spróbuj później.')
+  expect(await within(preview()).findByRole('alert')).toHaveTextContent('Spróbuj później.')
   expect(patches(calls)).toHaveLength(0)
 })
 
-it('podgląd i select nie rozpoczynają drag/drop karty, ale sama karta nadal działa', async () => {
+it('select nie otwiera modala ani nie rozpoczyna drag/drop, a drag karty nie otwiera modala', async () => {
   const { calls } = setup(projection(), {
     [`PATCH ${path(9)}`]: ok(projection([progress(9, 'in_progress')])),
   }, { content: previewContent })
   await screen.findByRole('region', { name: 'Do zrobienia' })
-  await userEvent.setup().click(disclosure())
   const store = {}
   const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
-  const details = disclosure().parentElement
-  for (const target of [disclosure(), within(details).getByText('Teoria lekcji'), selector('Lekcja Z')]) {
-    expect(fireEvent.dragStart(target, { dataTransfer })).toBe(false)
-    expect(store).toEqual({})
-  }
+  await userEvent.setup().click(selector('Lekcja Z'))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(fireEvent.dragStart(selector('Lekcja Z'), { dataTransfer })).toBe(false)
+  expect(store).toEqual({})
   fireEvent.dragStart(card('Lekcja Z'), { dataTransfer })
-  fireEvent.drop(details, { dataTransfer })
-  expect(patches(calls)).toHaveLength(0)
+  fireEvent.dragEnd(card('Lekcja Z'), { dataTransfer })
+  fireEvent.click(opener())
+  expect(screen.queryByRole('dialog')).toBeNull()
   fireEvent.drop(column('W trakcie'), { dataTransfer })
   await waitFor(() => expect(patches(calls)).toHaveLength(1))
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it.each(['Usuń z planu', 'Dodaj do planu'])('%s pozostaje niezależną akcją; drag plan/backlog nie otwiera modala', async action => {
+  const removing = action === 'Usuń z planu'
+  const before = locatedProjection(removing ? locations[1] : locations[2])
+  const after = locatedProjection(removing ? locations[2] : locations[1])
+  const method = removing ? 'DELETE' : 'POST'
+  const url = `${ROOT}6/lessons/${removing ? '9/' : ''}`
+  const { calls } = setup(before, { [`${method} ${url}`]: ok(after) }, { content: previewContent })
+  const scope = await screen.findByRole('region', { name: removing ? locations[1] : locations[2] })
+  const item = within(scope).getByRole('listitem', { name: 'Lekcja Z' })
+  const actionButton = within(item).getByRole('button', { name: `${action}: Lekcja Z` })
+  const store = {}
+  const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
+  expect(fireEvent.dragStart(actionButton, { dataTransfer })).toBe(false)
+  expect(store).toEqual({})
+  fireEvent.dragStart(item, { dataTransfer })
+  expect(store['application/x-soma-lesson-id']).toBe('9')
+  fireEvent.dragEnd(item, { dataTransfer })
+  fireEvent.click(opener(scope))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  // A fresh user click on the independent action must still work after a drag.
+  await userEvent.setup().click(actionButton)
+  await waitFor(() => expect(calls.filter(c => c.method !== 'GET')).toHaveLength(1))
+  expect(calls.find(c => c.method !== 'GET')).toMatchObject({ method, path: url })
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it.each([locations[1], locations[2]])('%s: drop zachowuje planowanie, bez otwierania modala', async location => {
+  const removing = location === locations[1]
+  const before = locatedProjection(location)
+  const after = locatedProjection(removing ? locations[2] : locations[1])
+  const method = removing ? 'DELETE' : 'POST'
+  const url = `${ROOT}6/lessons/${removing ? '9/' : ''}`
+  const { calls } = setup(before, { [`${method} ${url}`]: ok(after) }, { content: previewContent })
+  const scope = await screen.findByRole('region', { name: location })
+  const item = within(scope).getByRole('listitem', { name: 'Lekcja Z' })
+  const store = {}
+  const dataTransfer = { setData: (key, value) => { store[key] = value }, getData: key => store[key] || '' }
+  fireEvent.dragStart(item, { dataTransfer })
+  fireEvent.drop(screen.getByRole('region', { name: removing ? locations[2] : locations[1] }), { dataTransfer })
+  await waitFor(() => expect(calls.filter(c => c.method !== 'GET')).toHaveLength(1))
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('gest przeciągania na przycisku treści nie wywołuje click/open; kolejna aktywacja klawiaturą działa', async () => {
+  vi.stubGlobal('PointerEvent', MouseEvent)
+  setup()
+  await screen.findByRole('region', { name: locations[0] })
+  const trigger = opener()
+  fireEvent.pointerDown(trigger, { clientX: 10, clientY: 10 })
+  fireEvent.pointerMove(trigger, { clientX: 40, clientY: 10 })
+  fireEvent.pointerUp(trigger, { clientX: 40, clientY: 10 })
+  fireEvent.click(trigger)
+  expect(screen.queryByRole('dialog')).toBeNull()
+  trigger.focus()
+  await userEvent.setup().keyboard('{Enter}')
+  expect(preview()).toBeVisible()
 })
 
 it.each(['select', 'drag/drop'])('in_progress→todo przez %s używa CAS i zwalnia globalny lock', async method => {

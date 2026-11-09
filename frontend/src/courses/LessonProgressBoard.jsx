@@ -1,4 +1,4 @@
-import LessonContentPreview from './LessonContentPreview.jsx'
+import LessonTile from './LessonTile.jsx'
 
 // Lesson workflow is separate from CourseTask and from planned-cycle selection.
 export const lessonStatuses = [
@@ -99,20 +99,14 @@ export default function LessonProgressBoard({ entries, projection, canEdit, mova
                     const editable = movable && targets.length > 0
                     const terminal = current.status === 'done'
                     return (
-                      <li key={lesson.id} aria-label={lesson.title} className="lesson-progress-card"
+                      <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId} className="lesson-progress-card"
                         tabIndex={-1}
-                        ref={element => { if (!canEdit || terminal) buttonRefs.current[lesson.id] = element }}
+                        tileRef={element => { if (!canEdit || terminal) buttonRefs.current[lesson.id] = element }}
                         draggable={Boolean(editable)}
                         onDragStart={event => {
-                          if (!editable || event.target.closest('details, select, label, a, button, input, textarea')) {
-                            event.preventDefault()
-                            return
-                          }
                           event.dataTransfer.setData(dragType, String(lesson.id))
                           event.dataTransfer.effectAllowed = 'move'
                         }}>
-                        <span className="lesson-progress-title">{lesson.title}</span>
-                        <LessonContentPreview lesson={lesson} courseId={courseId} versionId={versionId} />
                         {canEdit && !terminal && <label>
                           <span className="sr-only">Zmień status: {lesson.title}</span>
                           <select value={current.status} disabled={!editable}
@@ -124,7 +118,7 @@ export default function LessonProgressBoard({ entries, projection, canEdit, mova
                             </option>)}
                           </select>
                         </label>}
-                      </li>
+                      </LessonTile>
                     )
                   })}
                 </ul>

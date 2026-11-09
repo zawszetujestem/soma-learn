@@ -3,6 +3,7 @@ import { coursesApi } from './api.js'
 import { useLoader } from './RequireAuth.jsx'
 import { EmptyMessage, ErrorMessage, LoadingMessage } from './StateViews.jsx'
 import LessonProgressBoard from './LessonProgressBoard.jsx'
+import LessonTile from './LessonTile.jsx'
 import './lesson-cycle-board.css'
 
 // Calendar dates, never UTC timestamps. Noon avoids DST midnight discontinuities.
@@ -80,17 +81,16 @@ function PlanDates({ planned, disabled, onSave }) {
 }
 
 const dragType = 'application/x-soma-lesson-id'
-function LessonList({ entries, action, movable, onMove, onDragStart, buttonRefs }) {
+function LessonList({ entries, action, movable, onMove, onDragStart, buttonRefs, courseId, versionId }) {
   return (
     <ul className="lesson-cycle-list">
       {entries.map(({ lesson }) => (
-        <li key={lesson.id} draggable={Boolean(movable)} onDragStart={event => {
-          if (!movable) { event.preventDefault(); return }
+        <LessonTile key={lesson.id} lesson={lesson} courseId={courseId} versionId={versionId}
+          draggable={Boolean(movable)} onDragStart={event => {
           event.dataTransfer.setData(dragType, String(lesson.id))
           event.dataTransfer.effectAllowed = 'move'
           onDragStart?.(lesson.id)
         }}>
-          <span>{lesson.title}</span>
           {action && (
             <button ref={element => { if (buttonRefs) buttonRefs.current[lesson.id] = element }}
               type="button" className="button button-secondary" disabled={!movable}
@@ -98,7 +98,7 @@ function LessonList({ entries, action, movable, onMove, onDragStart, buttonRefs 
               {action}
             </button>
           )}
-        </li>
+        </LessonTile>
       ))}
     </ul>
   )
@@ -257,6 +257,7 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
         {planned ? <>
           <p>{displayCycleDates(planned)}</p>
           {plannedEntries.length ? <LessonList entries={plannedEntries} action={canEdit ? 'Usuń z planu' : null}
+            courseId={content.course} versionId={content.id}
             movable={movable} onMove={remove} buttonRefs={buttonRefs} /> : <EmptyMessage>Plan nie zawiera lekcji.</EmptyMessage>}
         </> : <EmptyMessage>Brak planu kolejnego cyklu. Utwórz plan, aby przypisać lekcje.</EmptyMessage>}
         {canEdit && <PlanDates key={`${planned?.id || 'new'}:${planned?.start_date}:${planned?.end_date}`}
@@ -277,6 +278,7 @@ export default function LessonCycleBoard({ instanceId, content, canEdit, busy: i
         {!entries.length ? <EmptyMessage>Brak lekcji w tej wersji.</EmptyMessage>
           : !backlog.length ? <EmptyMessage>Wszystkie lekcje są przypisane do cykli.</EmptyMessage>
             : <GroupedBacklog entries={backlog} action={canEdit && planned ? 'Dodaj do planu' : null}
+              courseId={content.course} versionId={content.id}
               movable={movable && Boolean(planned)} onMove={add} buttonRefs={buttonRefs} />}
       </section>
     </section>

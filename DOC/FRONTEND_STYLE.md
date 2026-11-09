@@ -53,6 +53,7 @@ Rodzina: `'Manrope Variable', Manrope, system-ui, sans-serif`. `fonts.css` dekla
 - Przejścia przycisków 180 ms. Scoped reduced-motion wyłącza przejścia; istniejąca globalna reguła wyłącza płynne przewijanie.
 - Kotwice pozostają natywne. Nie blokuj domyślnej nawigacji bez zapewnienia prawidłowego punktu startowego kolejnego Tab.
 - Focus: obrys 3 px Blue z offsetem 4 px i białą poświatą; skip link homepage widoczny po fokusie. Sprawdzaj H1, landmarki i logiczną hierarchię nagłówków w konkretnych widokach.
+- **Współdzielone komponenty:** używaj istniejącego wspólnego komponentu zamiast kopiować jego markup lub styl do kolejnych widoków. Zmiany wspólnego wyglądu i zachowania wprowadzaj w jednym komponencie źródłowym; różnice wyrażaj jawnymi wariantami lub propsami. Gdy współdzielonego komponentu brakuje, wydziel go przed ponownym użyciem i sprawdź wszystkie jego miejsca użycia.
 
 ## Treść, routing i SOMA
 
